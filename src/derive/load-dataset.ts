@@ -65,7 +65,7 @@ export type PublishedPlatform = { name: string; aliases: string[]; domains?: str
 export type PublishedDataset = {
   schema: string;
   graderVersion: string;
-  redacted?: { rule: string; closingMessages: number };
+  redacted?: { rule: string; closingMessages: number; toolCalls?: number };
   wave: { id: number; name: string; file?: string; startedAt?: unknown; finishedAt?: unknown };
   surface: { key: string; label: string };
   design: {
@@ -83,10 +83,10 @@ export type PublishedDataset = {
 };
 
 /** The schema versions this loader understands. A newer one is refused, not guessed at. */
-export const SUPPORTED_SCHEMAS = ["aeo-tool/wave-dataset/1", "aeo-tool/wave-dataset/2"];
+export const SUPPORTED_SCHEMAS = ["aeo-tool/wave-dataset/1", "aeo-tool/wave-dataset/2", "aeo-tool/wave-dataset/3"];
 
 /** From version 2 a dataset carries its alias lists, and one that does not is refused. */
-const CARRIES_PLATFORMS = new Set(["aeo-tool/wave-dataset/2"]);
+const CARRIES_PLATFORMS = new Set(["aeo-tool/wave-dataset/2", "aeo-tool/wave-dataset/3"]);
 
 export type LoadPlan = {
   waveName: string;

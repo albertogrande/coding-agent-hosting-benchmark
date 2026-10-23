@@ -20,6 +20,7 @@ import { killStragglers } from "../stragglers";
 import { extractClaudeCli } from "../extract/claude-cli";
 import { extractCodexCli } from "../extract/codex-cli";
 import { adoption, decisionMode } from "@/derive/adoption";
+import { shellLookups } from "@/derive/shell-lookups";
 import type { RunOutcome, SurfaceConfig } from "../types";
 
 const exec = promisify(execFile);
@@ -301,7 +302,8 @@ async function runAgentIn(
 
   const a = adoption({ changedFiles: files, fileBodies: bodies, finalText: extracted.text });
   const fetches = extracted.sources.filter((s) => s.kind === "fetch").map((s) => s.url);
-  const mode = decisionMode({ searches: extracted.searchCount ?? 0, fetches: fetches.length });
+  const bash = (extracted.toolTimeline ?? []).filter((e) => e.tool === "Bash").map((e) => e.detail ?? "");
+  const mode = decisionMode({ searches: extracted.searchCount ?? 0, fetches: fetches.length, shellLookups: shellLookups(bash).length });
 
   return {
     ...extracted,

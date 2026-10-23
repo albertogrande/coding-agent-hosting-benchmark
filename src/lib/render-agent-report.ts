@@ -381,7 +381,7 @@ function decisionSection(b: AgentBenchmark): string {
       <thead><tr><th scope="col">Decided from</th><th scope="col" class="num">Runs</th><th scope="col">Adopted</th></tr></thead>
       <tbody>${b.decisionModes.map((m) => `
         <tr>
-          <th scope="row">${m.mode === "prior" ? "prior knowledge — no search, no page" : m.mode === "search" ? "a search — results read, no page opened" : m.mode === "fetch" ? "a page it opened" : "not recorded"}</th>
+          <th scope="row">${m.mode === "prior" ? "prior knowledge — no search, no page" : m.mode === "search" ? "a search — results read, no page opened" : m.mode === "shell" ? "web content read from the shell, no page opened" : m.mode === "fetch" ? "a page it opened" : "not recorded"}</th>
           <td class="num">${m.runs}</td>
           <td class="tally">${m.adopted.map((a) => `${esc(a.platform)} <span class="muted">${a.n}</span>`).join(" · ") || '<span class="muted">none</span>'}</td>
         </tr>`).join("")}

@@ -21,8 +21,12 @@ import type { Alias } from "@/db/schema";
  * runs of wave 3 move; three of them land on the label the review had already corrected by
  * hand, and run 191 — which argued against Fly.io and was recorded as adopting it — becomes
  * unresolved instead of wrong.
+ *
+ * stance-5 (2026-10-21): decision mode counts web content read from the shell. A run that
+ * `curl`-ed a vendor's docs was filed as prior knowledge; it is now `shell`
+ * (`src/derive/shell-lookups.ts`). Labels and adoption are unchanged.
  */
-export const GRADER_VERSION = "stance-4";
+export const GRADER_VERSION = "stance-5";
 
 /**
  * How a *chat* answer treated one platform. The question that arm asks is about a subject, so
@@ -44,7 +48,7 @@ export const REACH_STAGES: Reach[] = ["silent", "considered", "decided"];
 
 export type Grade = {
   stance: Stance | Reach;
-  /** prior | search | fetch — set for agent runs, absent for chat. */
+  /** prior | search | shell | fetch — set for agent runs, absent for chat. */
   decisionMode?: string;
   /** The brand's position among tracked platforms, by first appearance. Null if absent. */
   brandRank: number | null;

@@ -25,6 +25,14 @@ describe("redact", () => {
     expect(redact("password: `short`").text).toBe("password: `short`");
   });
 
+  it("takes a Discord bot token out by its shape, even a made-up one", () => {
+    // Joined at run time, so the test file itself never carries a token-shaped string.
+    const token = ["MTIzNDU2Nzg5MDEyMzQ1Njc4", "GaBcDe", `${"FaKe".repeat(9)}Fa`].join(".");
+    const r = redact(`DISCORD_TOKEN='${token}' node index.js`);
+    expect(r.text).toBe("DISCORD_TOKEN='[REDACTED]' node index.js");
+    expect(r.count).toBe(1);
+  });
+
   it("keeps the domain when it redacts an address, because platform names live there", () => {
     const r = redact("mail goes to noreply@github.com for now");
     expect(r.text).toBe("mail goes to [REDACTED]@github.com for now");

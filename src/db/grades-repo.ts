@@ -10,7 +10,8 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { cells, grades, prompts, runs, sources, waveSurfaces } from "./schema";
 import { GRADER_VERSION, grade, gradeAgentRun, type Stance } from "@/derive/grade";
-import { adoption } from "@/derive/adoption";
+import { adoption, decisionMode } from "@/derive/adoption";
+import { shellLookups } from "@/derive/shell-lookups";
 import type { CitationRow } from "@/derive/citations";
 import type { Alias } from "./schema";
 
@@ -20,6 +21,7 @@ type AgentRunRow = {
   text: string | null;
   rawResponse: string | null;
   searchCount: number | null;
+  toolTimeline?: { tool: string; detail?: string }[] | null;
 };
 
 /** What the raw record carries, when there is one. */
@@ -71,8 +73,10 @@ function decisionModeOf(r: AgentRunRow): string | undefined {
   }
   const fetches = Array.isArray(raw.fetches) ? raw.fetches.length : undefined;
   if (fetches === undefined && r.searchCount === null) return undefined;
-  if ((fetches ?? 0) > 0) return "fetch";
-  return (r.searchCount ?? 0) > 0 ? "search" : "prior";
+  // What the run read from its shell, from its Bash calls. A loaded published record restores
+  // the same timeline, so a re-grade from the record reads the same commands the store had.
+  const lookups = shellLookups((r.toolTimeline ?? []).filter((e) => e.tool === "Bash").map((e) => e.detail ?? "")).length;
+  return decisionMode({ searches: r.searchCount ?? 0, fetches: fetches ?? 0, shellLookups: lookups });
 }
 
 /**
@@ -100,7 +104,7 @@ export function gradeWave(
   const rows = db
     .select({
       id: runs.id, text: runs.text, truncated: runs.truncated, status: runs.status,
-      rawResponse: runs.rawResponse, searchCount: runs.searchCount,
+      rawResponse: runs.rawResponse, searchCount: runs.searchCount, toolTimeline: runs.toolTimeline,
       surfaceKey: waveSurfaces.surfaceKey,
     })
     .from(runs)

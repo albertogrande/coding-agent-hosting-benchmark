@@ -45,8 +45,13 @@ describe("planLoad", () => {
   it("names what a published record cannot restore, instead of leaving it to be discovered", () => {
     const plan = planLoad(data);
     expect(plan.losses.join(" ")).toMatch(/transcript/);
-    expect(plan.losses.join(" ")).toMatch(/tool timeline/);
     expect(plan.losses.join(" ")).toMatch(/tokens and cost/);
+  });
+
+  it("restores the tool timeline from schema 3, and names it as lost from a file that published a count", () => {
+    expect(planLoad(data).losses.join(" ")).not.toMatch(/tool timeline/);
+    const counted = { ...data, schema: "aeo-tool/wave-dataset/2", runs: data.runs.map((r) => ({ ...r, toolTimeline: 12 })) };
+    expect(planLoad(counted).losses.join(" ")).toMatch(/tool timeline/);
   });
 });
 

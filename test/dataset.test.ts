@@ -49,15 +49,22 @@ describe("waveDataset", () => {
     expect(build().redacted.closingMessages).toBe(0);
   });
 
-  it("keeps the closing message in full and the transcript out", () => {
+  it("keeps the closing message and the tool timeline in full, and the raw transcript out", () => {
     const long = "I chose Render. ".repeat(500);
     const d = build([row({ text: long, toolTimeline: [{ seq: 1, tool: "Bash", detail: "npm test" }], toolErrors: ["x"] })]);
     expect(d.runs[0].closingMessage).toBe(long);
-    expect(d.runs[0].toolTimeline).toBe(1);
+    // The timeline is the evidence behind "decided from prior knowledge": a reader has to be
+    // able to see that a run read nothing, so it is published as the calls, not a count.
+    expect(d.runs[0].toolTimeline).toEqual([{ seq: 1, tool: "Bash", detail: "npm test" }]);
     expect(d.runs[0].toolErrors).toBe(1);
-    const text = JSON.stringify(d);
-    expect(text).not.toContain("npm test");
-    expect(text).not.toContain('"stdout"');
+    expect(JSON.stringify(d)).not.toContain('"stdout"');
+  });
+
+  it("redacts the tool timeline by the closing message's rule, and counts it", () => {
+    const d = build([row({ toolTimeline: [{ seq: 1, tool: "Bash", detail: `git -c user.email=jane.doe@gmail.com commit -m "deploy"` }] })]);
+    expect(d.runs[0].toolTimeline[0].detail).not.toContain("jane.doe");
+    expect(d.runs[0].toolTimeline[0].detail).toContain("gmail.com");
+    expect(d.redacted.toolCalls).toBe(1);
   });
 
   it("stamps the sandbox, the review and the times in a form a reader can act on", () => {

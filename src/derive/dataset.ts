@@ -27,7 +27,7 @@ import type { Alias } from "../db/schema";
  * Version 2 adds `platforms`. Version 1 is still read (`src/derive/load-dataset.ts`), and
  * says out loud what it cannot restore.
  */
-export const DATASET_SCHEMA = "aeo-tool/wave-dataset/2";
+export const DATASET_SCHEMA = "aeo-tool/wave-dataset/3";
 
 /** One platform as the recogniser matched it: the spellings behind every `named` count. */
 export type DatasetPlatform = { name: string; aliases: string[]; domains: string[]; caseSensitive: boolean };
@@ -63,7 +63,12 @@ export type DatasetRun = {
   searchQueries: string[];
   pagesOpened: { url: string; host: string | null; kind: string; rank: number | null }[];
   toolErrors: number;
-  toolTimeline: number;
+  /**
+   * Every tool call in order, redacted like the closing message. Schema 2 published a count,
+   * which left "decided from prior knowledge" unprovable from the record: a reader could not
+   * see that a run read nothing, and could not see the runs that read vendor docs with curl.
+   */
+  toolTimeline: { seq: number; tool: string; detail?: string }[];
   needsReview: boolean;
   reviewNote: string | null;
   reviewedAt: string | null;
@@ -79,7 +84,7 @@ export type WaveDataset = {
    * publish that redacts nothing and a publish that redacts four are different events, and
    * a reader comparing this record against a run they can see needs to know which.
    */
-  redacted: { rule: string; closingMessages: number };
+  redacted: { rule: string; closingMessages: number; toolCalls: number };
   wave: { id: number; name: string; file: string; startedAt: string | null; finishedAt: string | null };
   surface: { key: string; label: string };
   design: {
@@ -164,7 +169,7 @@ export function datasetRun(r: AgentRow): DatasetRun {
     searchQueries: r.searchQueries,
     pagesOpened: r.sources.map((s) => ({ url: s.url, host: s.host, kind: s.kind, rank: s.rank })),
     toolErrors: r.toolErrors.length,
-    toolTimeline: r.toolTimeline.length,
+    toolTimeline: r.toolTimeline.map((e) => ({ seq: e.seq, tool: e.tool, ...(e.detail ? { detail: redact(e.detail).text } : {}) })),
     needsReview: r.needsReview ?? false,
     reviewNote: r.reviewNote,
     reviewedAt: iso(r.reviewedAt),
@@ -180,6 +185,7 @@ export function waveDataset(b: AgentBenchmark, rows: AgentRow[], meta: DatasetMe
   // Counted off the published text rather than recomputed, so the number cannot drift from
   // what the file actually carries.
   const redactedMessages = published.filter((r) => r.closingMessage?.includes(REDACTED)).length;
+  const redactedCalls = published.reduce((n, r) => n + r.toolTimeline.filter((e) => e.detail?.includes(REDACTED)).length, 0);
   const prompts: WaveDataset["prompts"] = {};
   for (const f of b.byFrame) prompts[f.promptKey] = { frame: f.frame, text: f.promptText };
   // A row whose prompt the frame cut did not carry (it cannot happen, but the map is
@@ -190,7 +196,7 @@ export function waveDataset(b: AgentBenchmark, rows: AgentRow[], meta: DatasetMe
     schema: DATASET_SCHEMA,
     generatedAt: meta.generatedAt,
     graderVersion: meta.graderVersion,
-    redacted: { rule: REDACTION_RULE, closingMessages: redactedMessages },
+    redacted: { rule: REDACTION_RULE, closingMessages: redactedMessages, toolCalls: redactedCalls },
     wave: {
       id: meta.wave.id,
       name: meta.wave.name,

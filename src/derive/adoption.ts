@@ -464,10 +464,16 @@ export function adoption(input: AdoptionInput): Adoption {
  * on versus off. "Never wins before search" is a different and much more actionable
  * finding than "rarely wins".
  */
-export type DecisionMode = "prior" | "search" | "fetch";
+export type DecisionMode = "prior" | "search" | "shell" | "fetch";
 
-export function decisionMode(counts: { searches: number; fetches: number }): DecisionMode {
+/**
+ * `shell` is a run that read web content from its shell and opened no page with the fetch
+ * tool: it read something, so it outranks a search whose results were only skimmed. Without
+ * it, `curl`-ing the vendor's docs was filed as prior knowledge (`src/derive/shell-lookups.ts`).
+ */
+export function decisionMode(counts: { searches: number; fetches: number; shellLookups?: number }): DecisionMode {
   if (counts.fetches > 0) return "fetch";
+  if ((counts.shellLookups ?? 0) > 0) return "shell";
   if (counts.searches > 0) return "search";
   return "prior";
 }

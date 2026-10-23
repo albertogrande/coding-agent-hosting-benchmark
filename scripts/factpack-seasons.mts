@@ -15,6 +15,7 @@ import type { PublishedDataset } from "../src/derive/load-dataset";
 import {
   agreementWithout,
   checkQuotes,
+  chosenWithFile,
   FLOOR,
   HARNESS_TERMS,
   harnessMentions,
@@ -259,8 +260,8 @@ say(
 // 6. Named against chosen
 const named = [...new Set([...s0.namedChosen, ...s1.namedChosen].map((x) => x.platform))];
 const nc = (s: SeasonFacts, pl: string) => s.namedChosen.find((x) => x.platform === pl) ?? { named: 0, chosen: 0 };
-const stubs0 = stubOnlyMentions(f0.d, "Railway", /Railway/);
-const stubs1 = stubOnlyMentions(f1.d, "Railway", /Railway/);
+const stubs0 = stubOnlyMentions(f0.d, "Railway", /\bRailway\b/i);
+const stubs1 = stubOnlyMentions(f1.d, "Railway", /\bRailway\b/i);
 say(
   "## 6. Named against chosen, outside the open brief",
   "",
@@ -276,19 +277,61 @@ say(
   `**Text search, not a graded measure.** Runs naming Railway only in sentences about the stubbed deploy CLIs: ${stubs0.stubOnly} of ${stubs0.named} in season 0, ${stubs1.stubOnly} of ${stubs1.named} in season 1.`,
 );
 
+// 6, continued. The funnel
+const fr = (s: SeasonFacts, pl: string) =>
+  s.funnel.find((x) => x.platform === pl) ?? { considered: 0, read: 0, chosen: 0, chosenFromPrior: 0, implemented: 0, chosenOnProse: 0 };
+const funnelPlatforms = [...new Set([...s0.funnel, ...s1.funnel].map((x) => x.platform))]
+  .sort((a, b) => fr(s0, b).considered + fr(s1, b).considered - fr(s0, a).considered - fr(s1, a).considered || a.localeCompare(b));
+const stage = (s: SeasonFacts, k: "considered" | "chosen" | "implemented") => s.funnel.reduce((n, x) => n + x[k], 0);
+const WRANGLER_JSON = /(^|\/)wrangler\.jsonc?$/i;
+const outsideOpen = (d: PublishedDataset) => d.runs.map((r) => rowOfPublished(r, d)).filter((r) => r.frame !== "open");
+const wr0 = chosenWithFile(outsideOpen(f0.d), "Cloudflare", WRANGLER_JSON);
+const wr1 = chosenWithFile(outsideOpen(f1.d), "Cloudflare", WRANGLER_JSON);
+say(
+  "### The funnel, stage by stage",
+  "",
+  `**Query:** the same ${s0.namedChosenOf} runs per season. Considered: named or chosen. Read: considered, and opened at least`,
+  "one page on the platform's published domains. Chosen: adopted. From prior: chosen with no page opened and no search.",
+  "Implemented: chosen, and the stored evidence lists a config file or a deploy command for that platform.",
+  "",
+  table(["platform", "season", "considered", "read", "chosen", "from prior", "implemented"],
+    funnelPlatforms.flatMap((pl) => (["0", "1"] as const).map((k) => {
+      const x = fr(k === "0" ? s0 : s1, pl);
+      return [pl, k, x.considered, x.read, x.chosen, x.chosenFromPrior, x.implemented];
+    }))),
+  "",
+  `Chosen runs whose tree carries the choice: ${stage(s0, "implemented")} of ${stage(s0, "chosen")} in season 0, ${stage(s1, "implemented")} of ${stage(s1, "chosen")} in season 1.`,
+  "",
+  "Read is not a stage the decision passes through: most pages are the chosen platform's reference docs, and the",
+  "published record does not say whether a page was opened before or after the choice. Off-catalogue platforms",
+  "have no published domains and read 0 by construction.",
+  "",
+  "**Known undercount.** The grader recognises `wrangler.toml` and not `wrangler.json` or `wrangler.jsonc`, so",
+  `Cloudflare's implemented count is deploy commands only. Cloudflare choices outside the open brief that wrote a`,
+  `\`wrangler.json\` or \`wrangler.jsonc\`: ${wr0.withFile} of ${wr0.chosen} in season 0, ${wr1.withFile} of ${wr1.chosen} in season 1.`,
+);
+
 // 7. Decision modes
 const dm = (s: SeasonFacts, f: string) => s.decisionModes.find((x) => x.frame === f)!;
 say(
   "## 7. Decision mode: what the agent read before deciding",
   "",
-  "**Query:** each run's stored decision mode. `prior` opened no page and ran no search. `search` searched and",
-  "opened nothing. `fetch` opened at least one page.",
+  "**Query:** each run's stored decision mode, grader `stance-5`. `prior` opened no page, ran no search and read no",
+  "web content from the shell. `search` searched and read nothing. `shell` read web content with curl or wget and",
+  "opened no page with the fetch tool. `fetch` opened at least one page. Package installs, downloads, status-only",
+  "checks, platform API pings and calls to the app itself do not count as reading (`src/derive/shell-lookups.ts`).",
   "",
-  table(["brief", "season", "prior", "search", "fetch", "searched at least once", "opened a page"],
+  table(["brief", "season", "prior", "search", "shell", "fetch", "searched at least once", "opened a page"],
     [...frames, "outside open", "all"].flatMap((f) => (["0", "1"] as const).map((k) => {
       const x = dm(k === "0" ? s0 : s1, f);
-      return [f, k, `${x.prior} of ${x.of}`, x.search, x.fetch, `${x.searched} of ${x.of}`, `${x.opened} of ${x.of}`];
+      return [f, k, `${x.prior} of ${x.of}`, x.search, x.shell, x.fetch, `${x.searched} of ${x.of}`, `${x.opened} of ${x.of}`];
     }))),
+  "",
+  "**When the reading happened.** Outside open, each run's first read (a search, a page or a shell lookup) against the first",
+  "call that wrote the chosen platform's config file. `unknown` is a run that read but wrote no config file for its pick:",
+  "a VM, GitHub Pages or Streamlit Community Cloud has none, and a run that chose nothing has no pick.",
+  "",
+  table(["order", "season 0", "season 1"], s0.readOrder.map((x, i) => [x.order, x.runs, s1.readOrder[i].runs])),
   "",
   `Outside open, decided from prior knowledge: ${dm(s0, "outside open").prior} of ${dm(s0, "outside open").of} (${pct(dm(s0, "outside open").prior / dm(s0, "outside open").of)}) in season 0, ${dm(s1, "outside open").prior} of ${dm(s1, "outside open").of} (${pct(dm(s1, "outside open").prior / dm(s1, "outside open").of)}) in season 1.`,
 );

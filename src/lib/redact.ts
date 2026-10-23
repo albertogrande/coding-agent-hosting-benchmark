@@ -39,6 +39,9 @@ const CREDENTIAL_PATTERNS: RegExp[] = [
   /(?<=`admin(?:@localhost)?`\s*\/\s*`)[^`\n]+(?=`)/gi,
   // password: `…`, token = `…`, api_key: `…` — only when the value is long enough to be one.
   /(?<=(?:password|passphrase|secret|token|api[_ -]?key)\s*[:=]\s*`)[A-Za-z0-9_+/=.-]{16,}(?=`)/gi,
+  // A Discord bot token, by its three-part shape. A control run tested a bot with one it made
+  // up, and GitHub's push protection cannot tell a made-up token from a live one.
+  /\b[MNO][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38}\b/g,
 ];
 
 /** `Matt Ferrante <matt@example.org>` — a git author identity, name and address together. */

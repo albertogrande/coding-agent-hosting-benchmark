@@ -2,6 +2,7 @@
  * One season's cell majorities against another's, with the paired interval, from the store.
  *
  *   npm run compare -- --wave 4 --against 3 [--exclude-frame open] [--floor-lo 0.73 --floor-hi 0.9]
+ *   npm run compare -- --wave 5 --against 3 --control 6 [--exclude-frame open]
  *
  * Reads both waves at the current grader version, so grade each one first (`npm run grade --
  * N`) and apply its review file; otherwise a side has no rows. With a floor, prints the
@@ -11,7 +12,7 @@ import { db } from "../src/db/client";
 import { agentRunRows } from "../src/db/agent-runs";
 import { getWave } from "../src/db/waves";
 import { splitByProvenance } from "../src/derive/benchmark";
-import { agreementWithInterval, angleVerdict } from "../src/derive/season-compare";
+import { agreementWithInterval, angleVerdict, controlReadout } from "../src/derive/season-compare";
 
 const argv = process.argv.slice(2);
 const flag = (n: string) => { const i = argv.indexOf(`--${n}`); return i === -1 ? undefined : argv[i + 1]; };
@@ -39,3 +40,16 @@ for (const x of r.disagreements) console.log(`  ${x.target} × ${x.frame}: wave 
 
 const lo = flag("floor-lo"), hi = flag("floor-hi");
 if (lo && hi) console.log(`\nangle rule: ${angleVerdict(r.rate, { lo: Number(lo), hi: Number(hi) })}`);
+
+// The control: one run per cell of the --against wave's model on the --wave wave's CLI.
+const c = Number(flag("control"));
+if (c) {
+  const rc = rowsOf(c);
+  const x = controlReadout(rc, rb, ra);
+  console.log(`\ncontrol wave ${c} "${getWave(d, c)?.name}" (${rc.length} runs)`);
+  console.log(`of ${x.changed.length} changed cells: ${x.sideS0} like wave ${b} · ${x.sideS1} like wave ${a} · ${x.neither} like neither` +
+    (x.missing ? ` · ${x.missing} with no gradeable control run` : ""));
+  for (const y of x.changed) console.log(`  ${y.target} × ${y.frame}: wave ${b} ${y.s0} → wave ${a} ${y.s1} · control ${y.control ?? "missing"}`);
+  console.log(`over every cell: control matches wave ${b}'s majority on ${x.matchS0.matching} of ${x.matchS0.cells}, wave ${a}'s on ${x.matchS1.matching} of ${x.matchS1.cells}`);
+  console.log(`control rule: ${x.verdict}`);
+}

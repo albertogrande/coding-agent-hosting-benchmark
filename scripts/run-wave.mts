@@ -166,6 +166,9 @@ console.log(`$${r.spentUsd.toFixed(2)} spent`);
 if (r.stoppedBecause) {
   console.log(`\nSTOPPED — ${r.stoppedBecause}`);
   console.log(`Re-run the same command to pick up the ${pendingRuns(d, waveId).length} runs still owed.`);
+  // A stopped wave is not a finished one. A non-zero exit keeps `run-wave A && run-wave B`
+  // from starting B after A was paused.
+  process.exitCode = 3;
 } else if (r.voided) {
   console.log(`\n${r.voided} run(s) did not finish and are voided, not graded. Check the wave health card.`);
 }
