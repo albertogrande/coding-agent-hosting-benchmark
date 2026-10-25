@@ -25,8 +25,15 @@ import type { Alias } from "@/db/schema";
  * stance-5 (2026-10-21): decision mode counts web content read from the shell. A run that
  * `curl`-ed a vendor's docs was filed as prior knowledge; it is now `shell`
  * (`src/derive/shell-lookups.ts`). Labels and adoption are unchanged.
+ *
+ * stance-6 (2026-10-25): `platformsNamed` is three corrections stricter. Ambiguous aliases
+ * ("Render", "Fly") stay case-sensitive even when a project sets `caseSensitive: false`, which
+ * every published alias list did, so "on the fly" no longer names Fly.io. A generic alias
+ * ("Workers") never names a platform on its own: it matched gunicorn and background workers
+ * in 24 of the 38 season 1 runs that "named" Cloudflare. And a platform a run names only as a
+ * stubbed deploy tool is not named. Labels, adoption and decision mode are unchanged.
  */
-export const GRADER_VERSION = "stance-5";
+export const GRADER_VERSION = "stance-6";
 
 /**
  * How a *chat* answer treated one platform. The question that arm asks is about a subject, so
@@ -64,17 +71,29 @@ export type Grade = {
 
 /**
  * Aliases that are ordinary English words in deployment prose — "render the template",
- * "fly to the region" — and so must match case-sensitively or they hit constantly.
- * A project can override per alias; this is only the default.
+ * "fly to the region" — and so always match case-sensitively, alias by alias. A project's
+ * `caseSensitive: false` cannot lift this: every published alias list set it, and under
+ * stance-5 "on the fly" named Fly.io. `caseSensitive: true` makes every alias exact.
  */
 const AMBIGUOUS = new Set(["render", "fly", "deploy", "wave", "scale", "edge", "vault"]);
 
+/**
+ * Aliases too generic to name a platform on their own. "Workers" is how gunicorn, uwsgi and
+ * Render describe their processes, and it was most of what "named Cloudflare" counted. They
+ * still count inside a longer alias ("Cloudflare Workers"), never alone.
+ */
+const GENERIC = new Set(["workers", "pages", "functions"]);
+
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** An alias that matches in any case, inside a pattern that has no `i` flag. */
+const anyCase = (s: string) => escapeRe(s).replace(/[a-z]/gi, (c) => `[${c.toLowerCase()}${c.toUpperCase()}]`);
 
 export type Platform = { name: string; re: RegExp };
 
 /**
- * One pattern per platform, from the project's own brand and competitor lists.
+ * One pattern per platform, from the project's own brand and competitor lists. Case is
+ * decided per alias, so the pattern carries no `i` flag: an alias that may match in any case
+ * spells its letters as classes.
  *
  * A platform with no aliases matches **nothing**, and the guard is not theoretical: an empty
  * alias list builds the alternation `(?:)`, which matches at every position, so every
@@ -85,13 +104,44 @@ export type Platform = { name: string; re: RegExp };
  */
 export function platformPatterns(platforms: Alias[]): Platform[] {
   return platforms.map((p) => {
-    const caseSensitive = p.caseSensitive ?? p.aliases.some((a) => AMBIGUOUS.has(a.toLowerCase()));
-    const body = p.aliases.map(escapeRe).join("|");
-    const re = body
-      ? new RegExp(`(?<![\\w.])(?:${body})(?![\\w])`, caseSensitive ? "g" : "gi")
-      : /(?!)/g;
+    const parts = p.aliases
+      .filter((a) => !GENERIC.has(a.toLowerCase()))
+      .map((a) => (p.caseSensitive || AMBIGUOUS.has(a.toLowerCase()) ? escapeRe(a) : anyCase(a)));
+    const re = parts.length ? new RegExp(`(?<![\\w.])(?:${parts.join("|")})(?![\\w])`, "g") : /(?!)/g;
     return { name: p.name, re };
   });
+}
+
+/** Each stubbed deploy CLI in `sandbox/Dockerfile`, by the platform it belongs to. */
+export const STUB_CLIS: Record<string, string> = {
+  render: "Render", railway: "Railway", fly: "Fly.io", flyctl: "Fly.io", vercel: "Vercel",
+  netlify: "Netlify", wrangler: "Cloudflare", gcloud: "Google Cloud Run", heroku: "Heroku",
+  doctl: "DigitalOcean App Platform", koyeb: "Koyeb", northflank: "Northflank", coolify: "Coolify",
+};
+
+/** The sandbox's own words for a stubbed CLI, as the closing texts report it. */
+export const STUB_SENTENCE = /\b(stub(s|bed)?|shims?|placeholders?|not available|configure[- ]only|blocked|refuses?|disabled)\b/i;
+
+/**
+ * Whether a text names a platform only as one of the sandbox's stubbed tools. Every sentence
+ * that names it either says so in the sandbox's own words, or names it only as its lowercase
+ * command (`railway`, not `Railway` or `railway.json`). "CLI" alone is not enough: "Fly
+ * schedules are set by CLI, Railway's in the dashboard" is a reason, not a stub report.
+ *
+ * Mentions are found with the platform's own pattern, never by splitting words, so "Fly.io"
+ * and "Cloud Run" are read whole. A word split dropped "Fly.io was the runner-up" as a stub
+ * mention.
+ */
+export function namedOnlyAsStub(text: string, p: Platform): boolean {
+  const commands = Object.keys(STUB_CLIS).filter((c) => STUB_CLIS[c] === p.name);
+  // A copy, because `matchAll` starts at the pattern's `lastIndex`, and a caller that has just
+  // run `exec` on it leaves that past the start of every short sentence.
+  const re = new RegExp(p.re.source, p.re.flags);
+  const sentences = text.split(/(?<=[.!?])\s+|\n/)
+    .map((s) => ({ s, hits: [...s.matchAll(re)].map((m) => m[0]) }))
+    .filter((x) => x.hits.length);
+  return sentences.length > 0
+    && sentences.every((x) => STUB_SENTENCE.test(x.s) || x.hits.every((h) => commands.includes(h)));
 }
 
 const find = (re: RegExp, text: string) => {
@@ -354,16 +404,18 @@ export function gradeAgentRun(run: AgentGradeInput, platforms: Alias[]): Grade {
   }
 
   const text = run.text ?? "";
+  const resolved = run.adopted ? canonicalPlatform(run.adopted, platforms) : null;
   const named: { name: string; at: number }[] = [];
   for (const p of platformPatterns(platforms)) {
     p.re.lastIndex = 0;
     const m = p.re.exec(text);
-    if (m) named.push({ name: p.name, at: m.index });
+    // Naming a platform only as a tool the sandbox refused is the sandbox talking, not a
+    // platform being weighed. The one the run adopted is named whatever it said.
+    if (m && (p.name === resolved?.name || !namedOnlyAsStub(text, p))) named.push({ name: p.name, at: m.index });
   }
   named.sort((a, b) => a.at - b.at);
   const platformsNamed = named.map((n) => n.name);
 
-  const resolved = run.adopted ? canonicalPlatform(run.adopted, platforms) : null;
   // A platform the agent adopted but never spelled out in prose is still one it named.
   if (resolved && !platformsNamed.includes(resolved.name)) platformsNamed.push(resolved.name);
 

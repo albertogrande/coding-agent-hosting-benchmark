@@ -11,11 +11,11 @@ import {
   rowOfPublished,
   seasonFacts,
   seasonPair,
-  stubOnlyMentions,
   stubsInCommand,
   TRIMMED_FORKS,
   untracedNumbers,
 } from "@/derive/season-factpack";
+import { namedOnlyAsStub, platformPatterns } from "@/derive/grade";
 
 const d0 = s0File as unknown as PublishedDataset;
 const d1 = s1File as unknown as PublishedDataset;
@@ -52,7 +52,8 @@ describe("seasonPair", () => {
 
   it("counts named against chosen outside the open brief", () => {
     const railway = p.s1.namedChosen.find((x) => x.platform === "Railway");
-    expect(railway).toMatchObject({ named: 39, chosen: 0 });
+    // Grader stance-6 leaves out the 16 runs that named Railway only as a stubbed tool. Under stance-5: 39.
+    expect(railway).toMatchObject({ named: 23, chosen: 0 });
     // Chosen in season 0 and never named there: the row must still count the choices.
     expect(p.s0.namedChosen.find((x) => x.platform === "Streamlit Community Cloud")).toMatchObject({ named: 0, chosen: 6 });
     // Grader stance-5: a web read from the shell is not prior knowledge. Under stance-4 these were 53 and 63.
@@ -104,32 +105,39 @@ describe("stubsInCommand", () => {
   });
 });
 
-describe("stubOnlyMentions", () => {
-  // Real closing texts, kept as they were published. The pattern is the case-sensitive one
-  // the fact pack script used to pass, so the function has to cope with it.
-  const only = (d: PublishedDataset, ids: number[]) => ({ ...d, runs: d.runs.filter((r) => ids.includes(r.runId)) });
+describe("named leaves out a platform named only as a stubbed tool (grader stance-6)", () => {
+  // Real closing texts, kept as they were published, read with the published alias lists.
+  const text = (d: PublishedDataset, id: number) => d.runs.find((r) => r.runId === id)?.closingMessage ?? "";
+  const pattern = (name: string) => platformPatterns(d1.platforms!).find((p) => p.name === name)!;
+  const stubOnly = (d: PublishedDataset, id: number, name = "Railway") => namedOnlyAsStub(text(d, id), pattern(name));
 
   it("counts a stub list that spells the platform in lowercase or as a command", () => {
     // s1 320: "the Render, Fly, Railway and GitHub command-line tools are blocked".
-    expect(stubOnlyMentions(only(d1, [320]), "Railway", /Railway/).runs).toEqual([320]);
+    expect(stubOnly(d1, 320)).toBe(true);
     // s0 276: a bare line "fly / railway / render / heroku / vercel / docker / gh".
-    expect(stubOnlyMentions(only(d0, [276]), "Railway", /Railway/).runs).toEqual([276]);
+    expect(stubOnly(d0, 276)).toBe(true);
   });
 
   it("does not count a real reason because its sentence says CLI", () => {
     // s0 192: "Fly.io (schedules configured by CLI ...), Railway (database wiring is dashboard-driven)".
     // s0 298: "Fly and Railway can run this, but on Fly a scheduled Machine is created imperatively via CLI".
-    expect(stubOnlyMentions(only(d0, [192, 262, 298]), "Railway", /Railway/).runs).toEqual([]);
+    for (const id of [192, 262, 298]) expect(stubOnly(d0, id), `run ${id}`).toBe(false);
     // s1 361: a stub sentence and then "Railway and Fly.io are cheaper but leave more setup to you."
-    expect(stubOnlyMentions(only(d1, [361]), "Railway", /Railway/).runs).toEqual([]);
+    expect(stubOnly(d1, 361)).toBe(false);
+  });
+
+  // A word split read "Fly.io" and "Cloud Run" as pieces and dropped both as stub mentions.
+  it("reads a platform's name whole", () => {
+    expect(stubOnly(d0, 297, "Fly.io")).toBe(false);
+    expect(stubOnly(d0, 218, "Google Cloud Run")).toBe(false);
   });
 
   it("agrees with the hand reading of the season 1 runs", () => {
-    const s1 = stubOnlyMentions(d1, "Railway", /Railway/);
-    expect([s1.stubOnly, s1.named]).toEqual([16, 39]);
-    expect(s1.runs).toEqual([320, 325, 330, 340, 364, 367, 368, 370, 379, 389, 393, 404, 406, 416, 429, 442]);
-    const s0 = stubOnlyMentions(d0, "Railway", /Railway/);
-    expect([s0.stubOnly, s0.named]).toEqual([14, 51]);
+    const hand = [320, 325, 330, 340, 364, 367, 368, 370, 379, 389, 393, 404, 406, 416, 429, 442];
+    for (const id of hand) expect(stubOnly(d1, id), `run ${id}`).toBe(true);
+    const outside = d1.runs.filter((r) => r.frame !== "open");
+    expect(outside.filter((r) => hand.includes(r.runId) && r.platformsNamed.includes("Railway"))).toEqual([]);
+    expect(outside.filter((r) => r.platformsNamed.includes("Railway")).length).toBe(23);
   });
 });
 

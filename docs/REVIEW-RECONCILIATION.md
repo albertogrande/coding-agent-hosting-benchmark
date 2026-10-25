@@ -95,7 +95,8 @@ Every load-bearing finding survives, and two get slightly weaker numbers:
   production at 20 of 33, unchanged. Cost still fragments across ten platforms.
 - **Named is not chosen.** Railway named 57, chosen 3. Vercel 51 → 3. Cloudflare 50 → 7.
   Cloud Run 35 → 2. Netlify 34 → 1. Heroku named 15, chosen never. Named counts come from
-  extraction rather than review, so the review cannot move them.
+  extraction rather than review, so the review cannot move them. These are stance-3 counts over
+  all 132 runs, and stance-6 replaced the rule behind them (`docs/SEASONS.md`, 25 October 2026).
 - **The open brief is an environment result.** 27 of 33 unchanged — the one headline the three
   reviews never disagreed about.
 - **"57% between them" becomes 54%.** Still a two-horse field with a long tail; still not a

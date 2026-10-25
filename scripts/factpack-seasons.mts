@@ -23,7 +23,6 @@ import {
   seasonPair,
   STUB_TERMS,
   stubHits,
-  stubOnlyMentions,
   TRIMMED_FORKS,
   untracedNumbers,
   type Quote,
@@ -260,21 +259,17 @@ say(
 // 6. Named against chosen
 const named = [...new Set([...s0.namedChosen, ...s1.namedChosen].map((x) => x.platform))];
 const nc = (s: SeasonFacts, pl: string) => s.namedChosen.find((x) => x.platform === pl) ?? { named: 0, chosen: 0 };
-const stubs0 = stubOnlyMentions(f0.d, "Railway", /\bRailway\b/i);
-const stubs1 = stubOnlyMentions(f1.d, "Railway", /\bRailway\b/i);
 say(
   "## 6. Named against chosen, outside the open brief",
   "",
-  `**Query:** the ${s0.namedChosenOf} runs outside the open brief in each season. Named counts runs whose closing text matched the platform's published alias list. Chosen counts runs that adopted it.`,
+  `**Query:** the ${s0.namedChosenOf} runs outside the open brief in each season. Named counts runs whose messages named the platform under grader ${f1.d.graderVersion}: by its published aliases, an ambiguous alias only in its exact case, a generic alias such as "Workers" never alone, and not when the run named it only as a stubbed deploy tool. Chosen counts runs that adopted it.`,
   "",
   table(["platform", "season 0 named", "season 0 chosen", "season 1 named", "season 1 chosen"],
     named.sort((a, b) => nc(s1, b).named + nc(s0, b).named - nc(s1, a).named - nc(s0, a).named || a.localeCompare(b))
       .map((pl) => [pl, nc(s0, pl).named, nc(s0, pl).chosen, nc(s1, pl).named, nc(s1, pl).chosen])),
   "",
-  "Two vocabulary notes. Season 0 counts one run under the alias `Pages`, and season 1 counts \"Oracle Cloud\"",
-  "and \"Oracle Cloud Always Free\" apart. Folding either one in moves no count by more than 1.",
-  "",
-  `**Text search, not a graded measure.** Runs naming Railway only in sentences about the stubbed deploy CLIs: ${stubs0.stubOnly} of ${stubs0.named} in season 0, ${stubs1.stubOnly} of ${stubs1.named} in season 1.`,
+  "One vocabulary note. Season 1 counts \"Oracle Cloud\" and \"Oracle Cloud Always Free\" apart. Folding them",
+  "together moves no count by more than 1.",
 );
 
 // 6, continued. The funnel
