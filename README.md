@@ -7,9 +7,9 @@ This repository is the record. It holds every run, every label and the code that
 both, so each number in the write-up can be checked here. The write-up is at
 <https://thebeat.dev/research/memory-first-docs-second/>.
 
-> **Disclosure.** Run by the author, Alberto Grande, with aeo-tool, the author's own benchmark
-> harness. The labelling readings were made by Claude models. No platform saw the results
-> before publication.
+> **Disclosure.** The author, Alberto Grande, built the test tool and ran every test. Its code
+> is in this repository. Claude models labelled the runs. No platform saw the results before
+> publication.
 
 ## The seasons
 
