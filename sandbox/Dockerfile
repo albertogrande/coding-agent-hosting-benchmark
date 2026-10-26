@@ -8,7 +8,10 @@
 #
 # Build:   docker build -t aeo-sandbox:s0 sandbox/
 # Digest:  docker image inspect --format '{{.Id}}' aeo-sandbox:s0   (stored on every run)
-FROM node:22-bookworm
+#
+# The base is pinned to the node:22-bookworm that season 0 was built on: its layers are the
+# first eight of aeo-sandbox:s0. The apt, .NET, poetry and uv steps below still float.
+FROM node:22-bookworm@sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d
 
 ARG CLAUDE_CODE_VERSION=2.1.260
 ARG GO_VERSION=1.23.4

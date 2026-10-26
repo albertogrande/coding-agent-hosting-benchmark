@@ -2,7 +2,24 @@
 
 Dated changes to the record. A correction says what moved and whether a headline changed.
 
-## 2026-10-26
+## 2026-10-26, version 1.2.0
+
+- `npm run figures` prints every figure in the write-up from the published files, and
+  `test/figures.test.ts` pins each one. The write-up's own code is not public, so until now
+  most of its section 4 could not be checked here. `data/platform-domains.json` is the
+  domain list the page serves, byte for byte. Nothing moved.
+- The same test rebuilds the page's `runs.json` and checks its sha256 against the served file.
+- `npm run init` creates the store's `hosting` project and its four briefs. `npm run plan`
+  works on a clean clone, which closes a known gap.
+- `npm run factpack` is retired. It checked a draft of an earlier piece, needed the private
+  store for one section and cited private notes. `npm run figures` replaces it.
+- `sandbox/Dockerfile` pins `node:22-bookworm` to the digest season 0 was built on. Its
+  layers are the first eight of `aeo-sandbox:s0`.
+- CI runs the typecheck, the tests and `npm run figures` on every push.
+- The README leads with the write-up's findings in its words, maps its terms to this
+  repository's, and states who paid for the runs.
+
+## 2026-10-26, version 1.1.0
 
 - `npm run compare` reads the published files directly, so Fig. 6 recomputes from a clean
   clone. It used to read wave ids from a local store and printed "0 of 0" without one. It
