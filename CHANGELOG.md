@@ -2,6 +2,12 @@
 
 Dated changes to the record. A correction says what moved and whether a headline changed.
 
+## 2026-11-05
+
+- The README opens with a short answer and asks each finding as a question. The figures are
+  the same. `CITATION.cff` gains an abstract and keywords. A test fixture's account reads
+  `author@mac`, as the published files do. Nothing moved.
+
 ## 2026-10-26, version 1.2.0
 
 - `npm run figures` prints every figure in the write-up from the published files, and

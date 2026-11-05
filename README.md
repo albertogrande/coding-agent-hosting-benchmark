@@ -2,7 +2,9 @@
 
 [![CI](https://github.com/albertogrande/coding-agent-hosting-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/albertogrande/coding-agent-hosting-benchmark/actions/workflows/ci.yml)
 
-Which hosting platform does Claude Code pick for a real app? We gave it the job but never named a platform. We ran each setup three times, on two models.
+Which hosting platform does Claude Code pick for a real app, and how does it decide? We gave it 11 real apps and four one-line briefs on two models. No brief named a platform. We ran each setup three times, which made 264 runs.
+
+**The short answer.** About half the time, Claude Code picks a host from what its model already knows, with no web search. When it does go online, it mostly reads the docs of the host it has already chosen. Only a request for the cheapest option makes it compare hosts. One model update changed about a third of its usual picks.
 
 This repository is the record. It holds every run, every label and the code that made both. Each number in the write-up can be checked here. The write-up is [Memory first, docs second](https://thebeat.dev/research/memory-first-docs-second/).
 
@@ -26,12 +28,29 @@ npm test
 
 Figures are for Opus 5.5 on the three briefs with a goal, unless a line says otherwise.
 
-1. **Half the time, the agent looks nothing up.** 51 of 99 runs made no search and opened no page. They read nothing from the web with curl either.
-2. **Docs confirm the pick.** 38 runs read a platform's pages and made a pick. In 31, the first step online opened the picked platform's page. No search came first.
-3. **Price is the exception.** On the cheapest brief, the agent compared hosts in 12 of 33 runs. On the other briefs, it never did. All 38 of its reads on hosts it did not pick were about price.
-4. **Named is not picked.** Railway was named in 23 of 99 runs and picked in none. Vercel was named in 25 and picked in 3.
-5. **The job picks the platform.** Least effort went to Render in 24 of 33 runs. Production went to Fly.io in 18 of 33.
-6. **The model moves the answers.** From Opus 5 to Opus 5.5, 11 of 31 app-and-brief answers changed. Two runs of Opus 5.5 changed 4 of 32. A control run answered 8 of the 11 changes like Opus 5. The model moved them, not Claude Code.
+### Does Claude Code search the web before it picks a host?
+
+Half the time it doesn't. 51 of 99 runs made no search and opened no page. They read nothing from the web with curl either.
+
+### What does it read when it does go online?
+
+Mostly the docs of the host it has already chosen. 38 runs read a platform's pages and made a pick. In 31, the first step online opened the picked platform's page. No search came first.
+
+### What makes it compare hosts?
+
+Price. On the cheapest brief, the agent compared hosts in 12 of 33 runs. On the other briefs, it never did. All 38 of its reads on hosts it did not pick were about price.
+
+### Does being named mean being picked?
+
+No. Railway was named in 23 of 99 runs and picked in none. Vercel was named in 25 and picked in 3.
+
+### Which host does it pick most?
+
+It depends on the job. Least effort went to Render in 24 of 33 runs. Production went to Fly.io in 18 of 33.
+
+### Does a new model change the picks?
+
+Yes. From Opus 5 to Opus 5.5, 11 of 31 app-and-brief answers changed. Two runs of Opus 5.5 changed 4 of 32. A control run answered 8 of the 11 changes like Opus 5. The model moved them, not Claude Code.
 
 Picks over all four briefs, 132 runs per model:
 

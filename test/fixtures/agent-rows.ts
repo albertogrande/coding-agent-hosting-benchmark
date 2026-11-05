@@ -23,7 +23,7 @@ export const row = (over: Partial<AgentRow> = {}): AgentRow => {
     sandbox: { image: "aeo-sandbox:s0", digest: "sha256:2a368b0692e48f3b9a6adfd8bbfe1b2861d873ccb989b32f97ec99a3466896b4", cliVersion: "2.1.260 (Claude Code)" },
     durationMs: 120_000, ranAt: 1_788_500_000, searchCount: 0, searchQueries: [], toolTimeline: [],
     toolErrors: [], sources: [], changedFiles: ["render.yaml"], repoUrl: "https://github.com/x/whoami",
-    baseSha: "1ce75d01", account: "alberto@mac", envClean: true, gradeId: id, reach: "decided",
+    baseSha: "1ce75d01", account: "author@mac", envClean: true, gradeId: id, reach: "decided",
     adopted: "Render", platformsNamed: ["Render"], decisionMode: "prior", evidence: "adopted Render",
     adoptionSource: "config-file", adoptionEvidence: ["config: Render"], adoptionConflict: null,
     needsReview: false, reviewNote: null, reviewedAt: null,
