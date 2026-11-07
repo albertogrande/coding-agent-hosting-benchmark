@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/albertogrande/coding-agent-hosting-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/albertogrande/coding-agent-hosting-benchmark/actions/workflows/ci.yml)
 
+**AEO for coding agents: how Claude Code chooses a host (264 runs).** The data, labels and harness behind [Memory first, docs second](https://thebeat.dev/research/memory-first-docs-second/), a study of answer engine optimization (AEO) for coding agents published on The Beat.
+
 Which hosting platform does Claude Code pick for a real app, and how does it decide? We gave it 11 real apps and four one-line briefs on two models. No brief named a platform. We ran each setup three times, which made 264 runs.
 
 **The short answer.** About half the time, Claude Code picks a host from what its model already knows, with no web search. When it does go online, it mostly reads the docs of the host it has already chosen. Only a request for the cheapest option makes it compare hosts. One model update changed about a third of its usual picks.
