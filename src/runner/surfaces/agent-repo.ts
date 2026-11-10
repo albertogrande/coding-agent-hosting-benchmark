@@ -11,10 +11,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { HarnessError, cliVersion, runCli, sanitiseEnv, throwForOutcome } from "../cli-process";
+import { HarnessError, cliVersion, resultEvent, runCli, sanitiseEnv, throwForOutcome } from "../cli-process";
 import {
-  containerName, digestMatches, imageCliVersion, imageDigest, liveContainers, readSandboxToken,
-  removeContainer, sandboxRunArgs, versionMatches, type SandboxConfig,
+  HOST_CREDENTIALS_FILE, containerName, digestMatches, imageCliVersion, imageDigest, liveContainers,
+  readSandboxToken, removeContainer, sandboxRunArgs, versionMatches, type SandboxConfig,
 } from "../sandbox";
 import { killStragglers } from "../stragglers";
 import { extractClaudeCli } from "../extract/claude-cli";
@@ -97,7 +97,46 @@ export type AgentSurfaceConfig = SurfaceConfig & {
    * what changes is what the agent can see and leave behind — nothing, either way.
    */
   sandbox?: SandboxConfig;
+  /**
+   * An experiment arm's overlay: a directory whose files are copied over the checkout and
+   * committed before the agent starts, so the fork itself never changes and `baseSha`
+   * becomes the overlay commit. `changedFiles` then counts only what the agent did.
+   * `{{app}}` in a file body is replaced with the target's id.
+   */
+  overlay?: { dir: string; app?: string };
 };
+
+/** Every file under `dir`, as paths relative to it. */
+async function listFiles(dir: string, rel = ""): Promise<string[]> {
+  const out: string[] = [];
+  for (const e of await fs.readdir(path.join(dir, rel), { withFileTypes: true })) {
+    const r = path.join(rel, e.name);
+    if (e.isDirectory()) out.push(...(await listFiles(dir, r)));
+    else if (e.isFile()) out.push(r);
+  }
+  return out;
+}
+
+/**
+ * Applies an overlay to a fresh checkout and commits it as the run's base. The commit is
+ * authored by a neutral identity with a neutral message, because the agent can read
+ * `git log` and an author or message naming the experiment would be a treatment of its own.
+ */
+export async function applyOverlay(repo: string, overlay: { dir: string; app?: string }): Promise<string[]> {
+  const files = await listFiles(overlay.dir);
+  for (const rel of files) {
+    const body = await fs.readFile(path.join(overlay.dir, rel), "utf8");
+    const dest = path.join(repo, rel);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.writeFile(dest, overlay.app ? body.replaceAll("{{app}}", overlay.app) : body);
+  }
+  if (files.length) {
+    await exec("git", ["add", "--", ...files], { cwd: repo });
+    await exec("git", ["-c", "user.name=maintainer", "-c", "user.email=maintainer@localhost",
+      "commit", "--quiet", "--no-verify", "-m", "Update project notes"], { cwd: repo });
+  }
+  return files;
+}
 
 /**
  * File bodies are read for the adoption ladder's deploy-artifact tier and stored on the
@@ -144,6 +183,32 @@ export type AgentKey = keyof typeof AGENTS;
 
 /** Exposed so the key list in `src/lib/surfaces.ts` can be checked against reality. */
 export const AGENT_SURFACES: Record<string, unknown> = AGENTS;
+
+export type RunUsage = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheCreationTokens: number | null;
+  numTurns: number | null;
+  totalCostUsd: number | null;
+  durationApiMs: number | null;
+};
+
+/** Token and price accounting from a Claude Code stream's `result` line, null-filled when absent. */
+export function usageOf(stdout: string): RunUsage {
+  const ev = resultEvent(stdout) ?? {};
+  const u = (typeof ev.usage === "object" && ev.usage ? ev.usage : {}) as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return {
+    inputTokens: n(u.input_tokens),
+    outputTokens: n(u.output_tokens),
+    cacheReadTokens: n(u.cache_read_input_tokens),
+    cacheCreationTokens: n(u.cache_creation_input_tokens),
+    numTurns: n(ev.num_turns),
+    totalCostUsd: n(ev.total_cost_usd),
+    durationApiMs: n(ev.duration_api_ms),
+  };
+}
 
 /** The argument list an agent CLI is started with. Exposed so a test can read it. */
 export function agentArgs(key: AgentKey, prompt: string, model: string, effort?: string): string[] {
@@ -234,17 +299,20 @@ async function runAgentIn(
     await exec("git", ["fetch", "--depth", "1", "origin", cfg.sha], { cwd: repo, maxBuffer: 64 * 1024 * 1024 });
     await exec("git", ["checkout", "--quiet", cfg.sha], { cwd: repo });
   }
-  const baseSha = (await git(repo, "rev-parse", "HEAD")).trim() || null;
-  if (cfg.sha && baseSha && !baseSha.startsWith(cfg.sha)) {
-    throw new Error(`pinned ${cfg.sha} but the checkout is at ${baseSha}`);
+  const forkSha = (await git(repo, "rev-parse", "HEAD")).trim() || null;
+  if (cfg.sha && forkSha && !forkSha.startsWith(cfg.sha)) {
+    throw new Error(`pinned ${cfg.sha} but the checkout is at ${forkSha}`);
   }
+  const overlayFiles = cfg.overlay ? await applyOverlay(repo, cfg.overlay) : [];
+  const baseSha = overlayFiles.length ? ((await git(repo, "rev-parse", "HEAD")).trim() || null) : forkSha;
 
   const timeoutMs = cfg.timeoutMs ?? AGENT_TIMEOUT_MS;
   let r;
   let sandbox: { image: string; digest: string | null; cliVersion: string | null; effort: string | null } | null = null;
   if (cfg.sandbox) {
-    const token = readSandboxToken();
-    if (!token) {
+    const useFile = cfg.sandbox.auth === "credentials-file";
+    const token = useFile ? null : readSandboxToken();
+    if (!useFile && !token) {
       throw new HarnessError("no sandbox token: run `claude setup-token` and save it to ~/.config/aeo/claude-oauth-token");
     }
     sandbox = await resolveSandbox(key, cfg.sandbox);
@@ -258,10 +326,14 @@ async function runAgentIn(
     env.PATH = process.env.PATH;
     try {
       // Started by digest, not by tag, so the image checked above is the image that runs.
-      r = await runCli("docker", sandboxRunArgs({ image: sandbox.digest!, root, name, cmd: agent.cmd, args: agent.args(prompt, cfg.model, sandbox.effort ?? undefined) }), {
+      r = await runCli("docker", sandboxRunArgs({
+        image: sandbox.digest!, root, name, cmd: agent.cmd, args: agent.args(prompt, cfg.model, sandbox.effort ?? undefined),
+        ...(useFile ? { credentialsFile: HOST_CREDENTIALS_FILE } : {}),
+        ...(cfg.sandbox.network ? { network: cfg.sandbox.network } : {}),
+      }), {
         timeoutMs,
         // The token rides in the client's environment and Docker copies it in by name.
-        env: { ...env, CLAUDE_CODE_OAUTH_TOKEN: token },
+        env: useFile ? env : { ...env, CLAUDE_CODE_OAUTH_TOKEN: token! },
       });
     } finally {
       // A timeout kills the docker client; the container it started is removed here.
@@ -314,6 +386,11 @@ async function runAgentIn(
       timedOut: r.timedOut,
       repoUrl,
       baseSha,
+      forkSha,
+      overlayFiles,
+      // What the run cost, from the CLI's own result line: tokens by kind, turns, and the
+      // API-equivalent price the CLI computes even when a subscription pays for it.
+      usage: usageOf(r.stdout),
       changedFiles: files,
       // Processes the run left running on the measuring machine, killed at its end. A
       // cell that "deploys" to localhost is a real outcome and a fact about the harness.
