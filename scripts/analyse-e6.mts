@@ -6,6 +6,7 @@
  * Reads only runs/ (never smoke/). Paired tests use complete blocks: every arm of the cell
  * stored, none voided or errored.
  */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { canonicalPlatform, gradeAgentRun } from "../src/derive/grade";
@@ -97,8 +98,28 @@ const runs: Run[] = fs.existsSync(runsDir)
   ? fs.readdirSync(runsDir).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(fs.readFileSync(path.join(runsDir, f), "utf8")))
   : [];
 const okRuns = runs.filter((r) => r.status === "ok");
-const m = new Map<string, ReturnType<typeof measures> & { run: Run }>();
-for (const r of okRuns) m.set(r.key, { ...measures(r, r.text ?? "", r.app, r.brief, r.adopted, r.decisionMode), run: r });
+
+/**
+ * Amendment 1: runs the ladder left as needs-review or unlisted take the blind reader's
+ * label from reviews.json, keyed by the packet id (a hash of the run key, so the packet
+ * carries no arm). `--automatic` reads the ladder's labels only, the sensitivity analysis.
+ */
+export const packetId = (key: string) => crypto.createHash("sha256").update(`e6:${key}`).digest("hex").slice(0, 10);
+const NEEDS = new Set(["needs-review", "unlisted"]);
+const automatic = process.argv.includes("--automatic");
+const reviewsFile = path.join(DIR, "reviews.json");
+const reviews = new Map<string, { winner: string | null; note: string }>(
+  fs.existsSync(reviewsFile) ? (JSON.parse(fs.readFileSync(reviewsFile, "utf8")) as any[]).map((r) => [r.id, r]) : []);
+const labelOf = (r: Run): { adopted: string | null; reviewed: boolean; pending: boolean } => {
+  if (automatic || !NEEDS.has(r.adoptionSource)) return { adopted: r.adopted, reviewed: false, pending: false };
+  const rv = reviews.get(packetId(r.key));
+  return rv ? { adopted: rv.winner, reviewed: true, pending: false } : { adopted: r.adopted, reviewed: false, pending: true };
+};
+const m = new Map<string, ReturnType<typeof measures> & { run: Run; reviewed: boolean; pending: boolean }>();
+for (const r of okRuns) {
+  const l = labelOf(r);
+  m.set(r.key, { ...measures(r, r.text ?? "", r.app, r.brief, l.adopted, r.decisionMode), run: r, reviewed: l.reviewed, pending: l.pending });
+}
 
 const blocks = new Map<number, Run[]>();
 for (const r of runs) blocks.set(r.block, [...(blocks.get(r.block) ?? []), r]);
@@ -115,6 +136,7 @@ const perArm = Object.fromEntries(ARMS.map((arm) => {
   const med = (vals: number[]) => { const s = [...vals].sort((a, b) => a - b); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; };
   return [arm, {
     runs: xs.length,
+    reviewedLabels: xs.filter((v) => v.reviewed).length, pendingReview: xs.filter((v) => v.pending).length,
     voidedOrError: runs.filter((r) => r.arm === arm && r.status !== "ok").length,
     picks: Object.fromEntries(Object.entries(picks).sort((a, b) => b[1] - a[1])),
     distinctPicks: Object.keys(picks).length,
@@ -163,11 +185,11 @@ const blocksOut = complete.map(([b, rs]) => ({
 }));
 
 const out = {
-  generatedAt: new Date().toISOString(), runsStored: runs.length, runsOk: okRuns.length,
+  generatedAt: new Date().toISOString(), labels: automatic ? "automatic" : "reviewed", runsStored: runs.length, runsOk: okRuns.length,
   blocksStarted: blocks.size, blocksComplete: complete.length,
   decisionRuleApplies: complete.length >= 30, perArm, contrasts, reference, blocks: blocksOut,
 };
-fs.writeFileSync(path.join(DIR, "analysis.json"), JSON.stringify(out, null, 2) + "\n");
+fs.writeFileSync(path.join(DIR, automatic ? "analysis-automatic.json" : "analysis.json"), JSON.stringify(out, null, 2) + "\n");
 const pct = (w: any) => (w.p === null ? "—" : `${w.k}/${w.n} ${(100 * w.p).toFixed(0)}% [${(100 * w.lo).toFixed(0)}–${(100 * w.hi).toFixed(0)}]`);
 console.log(`runs ${runs.length} (ok ${okRuns.length}) · blocks complete ${complete.length}/${blocks.size}`);
 for (const a of ARMS) {
