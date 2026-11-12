@@ -5,7 +5,8 @@
  *
  * An experiment lives in `experiments/<id>/`: `prereg.md` (hypotheses, arms, n, metrics,
  * analysis rule) and `design.json` (model, effort, CLI, the image each arm runs on, pinned
- * by digest, the targets and briefs, the order seed). The runner refuses to start unless
+ * by digest, an optional overlay of files committed as the run's base, the targets
+ * and briefs, the order seed). The runner refuses to start unless
  * `prereg.md` and `design.json` are committed and unchanged in the working tree, and stamps
  * the commit that registered them on every run, so a reader can check that the rules came
  * first.
@@ -41,7 +42,7 @@ const deadline = flag("deadline") ? Date.parse(flag("deadline")!) : Infinity;
 
 const dir = path.join("experiments", id);
 const design = JSON.parse(fs.readFileSync(path.join(dir, "design.json"), "utf8")) as Design;
-type Arm = { id: string; image: string; digest: string; claudeVersion?: string };
+type Arm = { id: string; image: string; digest: string; claudeVersion?: string; overlay?: string };
 type Design = {
   id: string; model: string; effort: string; claudeVersion: string; seed: number; reps: number;
   timeoutMs: number; auth?: "token" | "credentials-file"; network?: string;
@@ -86,6 +87,10 @@ log(`${id}: ${plan.length} planned, ${owed.length} owed${smoke ? " (smoke)" : ""
 for (const a of design.arms) {
   const got = (await exec("docker", ["image", "inspect", "--format", "{{.Id}}", a.image])).stdout.trim();
   if (got !== a.digest) { console.error(`arm ${a.id}: ${a.image} is ${got}, design pins ${a.digest}`); process.exit(1); }
+  if (a.overlay) {
+    const ov = path.join(dir, a.overlay);
+    if (!fs.existsSync(ov)) { console.error(`arm ${a.id}: overlay ${ov} is missing`); process.exit(1); }
+  }
 }
 
 /**
@@ -147,6 +152,7 @@ for (let i = 0; i < owed.length; ) {
       model: design.model, sha: p.app.sha, timeoutMs: design.timeoutMs,
       sandbox: { image: p.arm.image, digest: p.arm.digest, claudeVersion: p.arm.claudeVersion ?? design.claudeVersion, effort: design.effort,
         ...(design.auth ? { auth: design.auth } : {}), ...(design.network ? { network: design.network } : {}) },
+      ...(p.arm.overlay ? { overlay: { dir: path.join(dir, p.arm.overlay), app: p.app.id } } : {}),
     } as Parameters<typeof runAgent>[3]);
     attempted += 1; rateWaits = 0;
     const raw = r.raw as Record<string, unknown>;
@@ -158,6 +164,7 @@ for (let i = 0; i < owed.length; ) {
       status: r.truncated ? "voided" : "ok",
       modelRequested: design.model, modelResolved: r.modelResolved, cliVersion: r.toolVersion,
       image: p.arm.image, digest: p.arm.digest, effort: design.effort,
+      overlay: p.arm.overlay ?? null, overlayFiles: (raw.overlayFiles as string[] | undefined) ?? [], baseSha: r.baseSha,
       durationMs: r.durationMs, stopReason: r.stopReason, truncated: r.truncated,
       adopted: r.adopted, adoptionSource: r.adoptionSource, adoptionEvidence: r.adoptionEvidence,
       adoptionConflict: r.adoptionConflict, decisionMode: r.decisionMode, changedFiles: r.changedFiles,
