@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 BASE=aeo-sandbox:e6-named
-BASE_DIGEST=sha256:83a99a545ae5301805687f6e3848983e21eaf4c96cdc1d6f4548aada482ab96e
+BASE_DIGEST=sha256:526bcffec39016c5ec7aedddfd0469301681e5c3c60eaf3b2a22d2fd3e535525
 NET=(--network host)
 
 got=$(docker image inspect --format '{{.Id}}' "$BASE")
