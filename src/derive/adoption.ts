@@ -17,7 +17,7 @@
  * cross-agent agreement figure. Here they carry their evidence into a review queue.
  */
 
-export type AdoptionSource = "config-file" | "deploy-artifact" | "final-message" | "unlisted" | "needs-review";
+export type AdoptionSource = "config-file" | "deploy-artifact" | "final-message" | "incumbent-kept" | "incumbent-modified" | "unlisted" | "needs-review";
 
 export type Adoption = {
   /** The platform name, or null when nothing conclusive was found. */
@@ -32,6 +32,10 @@ export type Adoption = {
 /** A config file in the tree names its platform outright. */
 export const CONFIG_FILES: [RegExp, string][] = [
   [/(^|\/)railway\.(json|toml)$/i, "Railway"],
+  // Railway's 2026 IaC format (.railway/railway.ts) and a directory-only
+  // changed path (git sometimes records `.railway/` when the tree is new).
+  [/(^|\/)\.railway\/railway\.(ts|js|mjs|cjs)$/i, "Railway"],
+  [/(^|\/)\.railway\/?$/i, "Railway"],
   [/(^|\/)render\.yaml$/i, "Render"],
   [/(^|\/)fly\.toml$/i, "Fly.io"],
   [/(^|\/)vercel\.json$/i, "Vercel"],
@@ -56,7 +60,7 @@ export const CONFIG_FILES: [RegExp, string][] = [
  */
 export const DEPLOY_CMDS: [RegExp, string][] = [
   [/gcloud\s+run\s+deploy/i, "Google Cloud Run"],
-  [/\brailway\s+(?:up|link|deploy)/i, "Railway"],
+  [/\brailway\s+(?:up|link|deploy|config\s+apply)/i, "Railway"],
   [/\b(?:flyctl|fly)\s+deploy/i, "Fly.io"],
   [/\bvercel\s+(?:deploy|--prod)/i, "Vercel"],
   [/\bnetlify\s+deploy/i, "Netlify"],
@@ -476,4 +480,87 @@ export function decisionMode(counts: { searches: number; fetches: number; shellL
   if ((counts.shellLookups ?? 0) > 0) return "shell";
   if (counts.searches > 0) return "search";
   return "prior";
+}
+
+
+/** A platform config the experiment placed in the tree before the agent started. */
+export type IncumbentStatus = "kept" | "modified" | "deleted" | "replaced";
+export type Incumbent = {
+  /** The first overlay path that named a platform, for display. */
+  file: string;
+  files: string[];
+  platform: string;
+  status: IncumbentStatus;
+  /** Set when `status` is `replaced`: the platform whose config displaced it. */
+  replacedBy: string | null;
+};
+
+/**
+ * Status of a pre-existing platform config after the agent has finished.
+ *
+ * A fly.toml (or railway.toml, …) committed as the run's base does not appear in
+ * `changedFiles` if the agent leaves it alone, so the adoption ladder would otherwise
+ * miss the strongest signal the experiment placed. `kept` and `modified` mean the
+ * incumbent platform is still in the tree (including a migrate to another of that
+ * platform's config paths, for example `railway.toml` → `.railway/railway.ts`).
+ * `replaced` means the incumbent files are gone and a different platform's config
+ * is in the tree. `deleted` means the incumbent is gone and nothing replaced it.
+ */
+export function incumbentOf(input: {
+  overlayFiles: string[];
+  /** File bodies at the overlay commit. A missing key is treated as absent. */
+  baseBodies: Record<string, string | null>;
+  /** File bodies after the agent. `null` or a missing key means the path is gone. */
+  finalBodies: Record<string, string | null>;
+  changedFiles: string[];
+}): Incumbent | null {
+  const files = input.overlayFiles.filter((f) => CONFIG_FILES.some(([re]) => re.test(f)));
+  if (!files.length) return null;
+  const platform = CONFIG_FILES.find(([re]) => re.test(files[0]))![1];
+  const present = (bodies: Record<string, string | null>, f: string) =>
+    Object.prototype.hasOwnProperty.call(bodies, f) ? bodies[f] : null;
+  const finalPaths = Object.entries(input.finalBodies).filter(([, b]) => b != null).map(([f]) => f);
+  const finalPlatforms = configSignals([...new Set([...finalPaths, ...input.changedFiles])]);
+  const stillIncumbentPlatform = finalPlatforms.includes(platform)
+    || files.some((f) => present(input.finalBodies, f) != null);
+  const other = finalPlatforms.filter((p) => p !== platform);
+  const allKept = files.every((f) => {
+    const base = present(input.baseBodies, f);
+    const fin = present(input.finalBodies, f);
+    return base != null && fin != null && base === fin;
+  });
+  const anyGone = files.some((f) => present(input.finalBodies, f) == null);
+  let status: IncumbentStatus;
+  let replacedBy: string | null = null;
+  if (allKept && !anyGone) {
+    status = "kept";
+  } else if (stillIncumbentPlatform) {
+    status = "modified";
+  } else if (other.length) {
+    status = "replaced";
+    replacedBy = other[0];
+  } else {
+    status = "deleted";
+  }
+  return { file: files[0], files, platform, status, replacedBy };
+}
+
+/**
+ * If the ladder did not adopt a *different* platform, a kept or modified incumbent
+ * is itself the pick. The ladder's own Railway verdict is left untouched; a clash
+ * with a different platform is left to the ladder (and to review).
+ */
+export function applyIncumbent(a: Adoption, inc: Incumbent | null): Adoption {
+  if (!inc || (inc.status !== "kept" && inc.status !== "modified")) return a;
+  if (a.adopted && canon(a.adopted) !== inc.platform) return a;
+  if (a.adopted === inc.platform && (a.source === "config-file" || a.source === "deploy-artifact" || a.source === "final-message")) {
+    return a;
+  }
+  const source: AdoptionSource = inc.status === "kept" ? "incumbent-kept" : "incumbent-modified";
+  return {
+    adopted: inc.platform,
+    source,
+    evidence: [...a.evidence, `incumbent ${inc.status}: ${inc.files.join(", ")}`],
+    conflict: a.conflict,
+  };
 }

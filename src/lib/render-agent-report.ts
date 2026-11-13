@@ -94,6 +94,8 @@ const brief = (detail: string): string => {
 
 const TIER: Record<string, string> = {
   "config-file": "a config file it wrote",
+  "incumbent-kept": "a config already in the repository, left in place",
+  "incumbent-modified": "a config already in the repository, which it edited",
   "deploy-artifact": "a deploy command it wrote",
   "final-message": "its closing message",
   unlisted: "its closing message (a name outside the catalogue)",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fixtures from "./fixtures/agent-transcripts.json";
 import {
-  adoption, canon, configSignals, decisionMode, deployArtifacts, statedChoice,
+  adoption, applyIncumbent, canon, configSignals, decisionMode, deployArtifacts, incumbentOf, statedChoice,
 } from "@/derive/adoption";
 
 /**
@@ -277,5 +277,104 @@ describe("platforms outside the recognised list", () => {
     expect(said("I chose the Dockerfile approach and built the image.").adopted).toBeNull();
     expect(said("Configuration is the pick for this repo.").adopted).toBeNull();
     expect(said("I adopted the dev container instead.").adopted).toBe("dev-env");
+  });
+});
+
+describe("Railway IaC config paths", () => {
+  it("recognises .railway/railway.ts and a directory-only changed path", () => {
+    expect(configSignals([".railway/railway.ts"])).toEqual(["Railway"]);
+    expect(configSignals([".railway/"])).toEqual(["Railway"]);
+    expect(configSignals([".railway/railway.js"])).toEqual(["Railway"]);
+    expect(configSignals(["apps/web/railway.toml"])).toEqual(["Railway"]);
+    expect(configSignals([".railway/package.json"])).toEqual([]);
+  });
+});
+
+describe("incumbentOf", () => {
+  const toml = "[deploy]\nstartCommand = 'npm start'\n";
+  const ts = "export default { name: 'web' };\n";
+  const base = {
+    overlayFiles: ["railway.toml"],
+    baseBodies: { "railway.toml": toml },
+  };
+
+  it("is kept when the file is unchanged", () => {
+    const inc = incumbentOf({
+      ...base,
+      finalBodies: { "railway.toml": toml },
+      changedFiles: ["README.md"],
+    });
+    expect(inc).toMatchObject({ file: "railway.toml", platform: "Railway", status: "kept", replacedBy: null });
+  });
+
+  it("is modified when the file is edited but stays Railway", () => {
+    const inc = incumbentOf({
+      ...base,
+      finalBodies: { "railway.toml": toml + "healthcheckPath = '/'\n" },
+      changedFiles: ["railway.toml"],
+    });
+    expect(inc?.status).toBe("modified");
+  });
+
+  it("is modified when railway.toml is migrated to .railway/railway.ts", () => {
+    const inc = incumbentOf({
+      ...base,
+      finalBodies: { "railway.toml": null, ".railway/railway.ts": ts },
+      changedFiles: [".railway/railway.ts"],
+    });
+    expect(inc).toMatchObject({ status: "modified", platform: "Railway", replacedBy: null });
+  });
+
+  it("is replaced when the incumbent is gone and a different platform's config is written", () => {
+    const inc = incumbentOf({
+      ...base,
+      finalBodies: { "railway.toml": null, "fly.toml": "app = 'x'\n" },
+      changedFiles: ["fly.toml"],
+    });
+    expect(inc).toMatchObject({ status: "replaced", replacedBy: "Fly.io" });
+  });
+
+  it("is deleted when the incumbent is gone and nothing replaces it", () => {
+    const inc = incumbentOf({
+      ...base,
+      finalBodies: { "railway.toml": null },
+      changedFiles: [],
+    });
+    expect(inc?.status).toBe("deleted");
+  });
+
+  it("is null when the overlay has no platform config", () => {
+    expect(incumbentOf({
+      overlayFiles: ["AGENTS.md"],
+      baseBodies: { "AGENTS.md": "notes\n" },
+      finalBodies: { "AGENTS.md": "notes\n" },
+      changedFiles: [],
+    })).toBeNull();
+  });
+});
+
+describe("applyIncumbent", () => {
+  const kept = { file: "railway.toml", files: ["railway.toml"], platform: "Railway", status: "kept" as const, replacedBy: null };
+  it("fills a missing pick from a kept incumbent", () => {
+    const a = applyIncumbent(
+      { adopted: null, source: "needs-review", evidence: [], conflict: null },
+      kept,
+    );
+    expect(a).toMatchObject({ adopted: "Railway", source: "incumbent-kept" });
+  });
+  it("leaves a different platform's ladder verdict in place", () => {
+    const a = applyIncumbent(
+      { adopted: "Fly.io", source: "config-file", evidence: ["config: Fly.io"], conflict: null },
+      kept,
+    );
+    expect(a.adopted).toBe("Fly.io");
+    expect(a.source).toBe("config-file");
+  });
+  it("does not rewrite a ladder Railway verdict's source", () => {
+    const a = applyIncumbent(
+      { adopted: "Railway", source: "config-file", evidence: ["config: Railway"], conflict: null },
+      { ...kept, status: "modified" },
+    );
+    expect(a.source).toBe("config-file");
   });
 });

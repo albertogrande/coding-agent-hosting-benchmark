@@ -19,7 +19,7 @@ import {
 import { killStragglers } from "../stragglers";
 import { extractClaudeCli } from "../extract/claude-cli";
 import { extractCodexCli } from "../extract/codex-cli";
-import { adoption, decisionMode } from "@/derive/adoption";
+import { adoption, applyIncumbent, decisionMode, incumbentOf, CONFIG_FILES } from "@/derive/adoption";
 import { shellLookups } from "@/derive/shell-lookups";
 import type { RunOutcome, SurfaceConfig } from "../types";
 
@@ -37,6 +37,7 @@ export type AgentRunResult = RunOutcome & {
   decisionMode: string;
   changedFiles: string[];
   baseSha: string | null;
+  incumbent: import("@/derive/adoption").Incumbent | null;
 };
 
 async function git(cwd: string, ...args: string[]): Promise<string> {
@@ -63,6 +64,46 @@ export async function changedFiles(repo: string, baseSha: string | null): Promis
     ? (await git(repo, "diff", "--name-only", `${baseSha}..HEAD`)).split("\n").map((l) => l.trim()).filter(Boolean)
     : [];
   return [...new Set([...dirty, ...committed])];
+}
+
+
+async function gitShow(repo: string, sha: string, rel: string): Promise<string | null> {
+  try {
+    const { stdout } = await exec("git", ["show", `${sha}:${rel}`], { cwd: repo, maxBuffer: 8 * 1024 * 1024 });
+    return stdout;
+  } catch {
+    return null;
+  }
+}
+
+async function readIncumbent(repo: string, opts: {
+  overlayFiles: string[];
+  baseSha: string | null;
+  changedFiles: string[];
+}) {
+  if (!opts.overlayFiles.length || !opts.baseSha) return null;
+  const candidates = opts.overlayFiles.filter((f) => CONFIG_FILES.some(([re]) => re.test(f)));
+  if (!candidates.length) return null;
+  const baseBodies: Record<string, string | null> = {};
+  const finalBodies: Record<string, string | null> = {};
+  // Also look at Railway IaC paths the agent may have migrated to, so a
+  // railway.toml → .railway/railway.ts move is "modified", not "deleted".
+  const extra = opts.changedFiles.filter((f) => CONFIG_FILES.some(([re]) => re.test(f)));
+  const paths = [...new Set([...candidates, ...extra])];
+  for (const f of paths) {
+    baseBodies[f] = await gitShow(repo, opts.baseSha, f);
+    try {
+      finalBodies[f] = await fs.readFile(path.join(repo, f), "utf8");
+    } catch {
+      finalBodies[f] = null;
+    }
+  }
+  return incumbentOf({
+    overlayFiles: opts.overlayFiles,
+    baseBodies,
+    finalBodies,
+    changedFiles: opts.changedFiles,
+  });
 }
 
 async function readBodies(repo: string, files: string[]) {
@@ -122,14 +163,38 @@ async function listFiles(dir: string, rel = ""): Promise<string[]> {
  * authored by a neutral identity with a neutral message, because the agent can read
  * `git log` and an author or message naming the experiment would be a treatment of its own.
  */
-export async function applyOverlay(repo: string, overlay: { dir: string; app?: string }): Promise<string[]> {
-  const files = await listFiles(overlay.dir);
-  for (const rel of files) {
-    const body = await fs.readFile(path.join(overlay.dir, rel), "utf8");
-    const dest = path.join(repo, rel);
-    await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.writeFile(dest, overlay.app ? body.replaceAll("{{app}}", overlay.app) : body);
+/**
+ * Maps overlay sources to destination paths in the checkout. An optional
+ * `apps/<app>/` slice is copied with that prefix stripped (`apps/whoami/railway.toml`
+ * lands at `railway.toml`), so one overlay directory can hold a different file
+ * per target. Files outside `apps/` are copied as they are, which is how E1's
+ * single `AGENTS.md` works. Sibling `apps/<other>/` trees are not copied.
+ */
+export async function overlayMappings(overlay: { dir: string; app?: string }): Promise<{ src: string; dest: string }[]> {
+  const all = await listFiles(overlay.dir);
+  const appSlice = overlay.app ? path.join("apps", overlay.app) : null;
+  const appsRoot = "apps";
+  const hasSlice = appSlice != null && all.some((f) => f === appSlice || f.startsWith(appSlice + path.sep) || f.startsWith(appSlice + "/"));
+  if (!hasSlice) return all.map((f) => ({ src: f, dest: f }));
+  const out: { src: string; dest: string }[] = [];
+  for (const f of all) {
+    const underSlice = f.startsWith(appSlice + path.sep) || f.startsWith(appSlice + "/");
+    const underApps = f === appsRoot || f.startsWith(appsRoot + path.sep) || f.startsWith(appsRoot + "/");
+    if (underSlice) out.push({ src: f, dest: f.slice(appSlice!.length + 1) });
+    else if (!underApps) out.push({ src: f, dest: f });
   }
+  return out;
+}
+
+export async function applyOverlay(repo: string, overlay: { dir: string; app?: string }): Promise<string[]> {
+  const mappings = await overlayMappings(overlay);
+  for (const { src, dest } of mappings) {
+    const body = await fs.readFile(path.join(overlay.dir, src), "utf8");
+    const destPath = path.join(repo, dest);
+    await fs.mkdir(path.dirname(destPath), { recursive: true });
+    await fs.writeFile(destPath, overlay.app ? body.replaceAll("{{app}}", overlay.app) : body);
+  }
+  const files = mappings.map((m) => m.dest);
   if (files.length) {
     await exec("git", ["add", "--", ...files], { cwd: repo });
     await exec("git", ["-c", "user.name=maintainer", "-c", "user.email=maintainer@localhost",
@@ -372,7 +437,8 @@ async function runAgentIn(
   const files = await changedFiles(repo, baseSha);
   const bodies = await readBodies(repo, files);
 
-  const a = adoption({ changedFiles: files, fileBodies: bodies, finalText: extracted.text });
+  const inc = await readIncumbent(repo, { overlayFiles, baseSha, changedFiles: files });
+  const a = applyIncumbent(adoption({ changedFiles: files, fileBodies: bodies, finalText: extracted.text }), inc);
   const fetches = extracted.sources.filter((s) => s.kind === "fetch").map((s) => s.url);
   const bash = (extracted.toolTimeline ?? []).filter((e) => e.tool === "Bash").map((e) => e.detail ?? "");
   const mode = decisionMode({ searches: extracted.searchCount ?? 0, fetches: fetches.length, shellLookups: shellLookups(bash).length });
@@ -408,6 +474,7 @@ async function runAgentIn(
         adopted: a.adopted, source: a.source, evidence: a.evidence, conflict: a.conflict,
         decisionMode: mode,
       },
+      incumbent: inc,
     },
     // Served, not requested: the Claude transcript names its model on every turn, and the
     // Codex parser cannot yet read one, so it reports unknown rather than the flag.
@@ -422,5 +489,6 @@ async function runAgentIn(
     decisionMode: mode,
     changedFiles: files,
     baseSha,
+    incumbent: inc,
   };
 }

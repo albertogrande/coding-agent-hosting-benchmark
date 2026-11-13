@@ -53,6 +53,24 @@ describe("applyOverlay", () => {
     expect(g("log", "-1", "--format=%an %s")).toBe("maintainer Update project notes");
     expect(g("status", "--porcelain")).toBe("");
   });
+
+  it("copies apps/<app>/ with the prefix stripped and ignores sibling app slices", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "ov-repo-"));
+    const g = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" }).trim();
+    g("init", "-q"); fs.writeFileSync(path.join(repo, "a.txt"), "a");
+    g("add", "a.txt"); g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
+    const ov = fs.mkdtempSync(path.join(os.tmpdir(), "ov-"));
+    fs.mkdirSync(path.join(ov, "apps", "whoami"), { recursive: true });
+    fs.mkdirSync(path.join(ov, "apps", "astro-blog"), { recursive: true });
+    fs.writeFileSync(path.join(ov, "apps", "whoami", "railway.toml"), "app = '{{app}}'\n");
+    fs.writeFileSync(path.join(ov, "apps", "astro-blog", "railway.toml"), "WRONG\n");
+    fs.writeFileSync(path.join(ov, "NOTES.md"), "shared\n");
+    const files = await applyOverlay(repo, { dir: ov, app: "whoami" });
+    expect(files.sort()).toEqual(["NOTES.md", "railway.toml"]);
+    expect(fs.readFileSync(path.join(repo, "railway.toml"), "utf8")).toBe("app = 'whoami'\n");
+    expect(fs.existsSync(path.join(repo, "apps"))).toBe(false);
+    expect(fs.readFileSync(path.join(repo, "NOTES.md"), "utf8")).toBe("shared\n");
+  });
 });
 
 describe("usageOf", () => {
