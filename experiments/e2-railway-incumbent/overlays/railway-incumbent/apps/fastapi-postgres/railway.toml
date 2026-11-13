@@ -1,0 +1,12 @@
+# {{app}} — Railway service
+[build]
+builder = "NIXPACKS"
+buildCommand = "poetry install --only main,prod --no-interaction"
+
+[deploy]
+preDeployCommand = "poetry run alembic upgrade head"
+startCommand = "poetry run gunicorn src.application:app --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
