@@ -22,6 +22,7 @@ import {
   CONTAINER_USER, CONTAINER_WORK, SANDBOX_TOKEN_FILE, digestMatches, imageCliVersion, imageDigest, readSandboxToken,
   sandboxOf, sandboxRunArgs, versionMatches, type SandboxConfig,
 } from "./sandbox";
+import { egressMismatches, egressProbeScript, egressRunArgs, startEgress, stopEgress } from "./egress";
 
 const exec = promisify(execFile);
 
@@ -486,6 +487,36 @@ export async function checkSandbox(
   return out;
 }
 
+/**
+ * A network condition holds: its proxy starts from the image, and a session behind it gets
+ * the answers the condition promises (`egressExpectations`). Run once per condition in a wave.
+ */
+export async function checkEgress(image: string, policy: string): Promise<Check> {
+  const name = `network ${policy}`;
+  const id = `aeo-run-check${process.pid}${policy.replace(/\W/g, "")}`;
+  let egress;
+  try {
+    egress = await startEgress({ image, name: id, policy });
+  } catch (e) {
+    return fail(name, (e as Error).message.split("\n")[0], "check that Docker can create an internal network and that the image has node and openssl");
+  }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aeo-egress-check-"));
+  try {
+    fs.mkdirSync(path.join(root, "repo"));
+    const args = sandboxRunArgs({ image, root, name: `${id}-probe`, cmd: "sh", args: ["-c", egressProbeScript(policy)], network: egressRunArgs(egress) });
+    const { stdout } = await exec("docker", args, { timeout: 180_000, env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: "" } });
+    const bad = egressMismatches(policy, stdout);
+    return bad.length
+      ? fail(name, bad.join("; "), "the condition does not hold: read sandbox/egress/policy.mjs and the proxy log before running")
+      : pass(name, stdout.trim().split("\n").join(" · "));
+  } catch (e) {
+    return unknown(name, (e as Error).message.split("\n")[0]);
+  } finally {
+    await stopEgress(egress);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 /** Parses the toolchain report from inside the image. Pure, so a test can read it. */
 export function toolchainCheck(raw: string): Check {
   const v: Record<string, string> = {};
@@ -547,12 +578,22 @@ export async function checkEnvironment(
     checks.push(await checkUnshimmedClis());
     checks.push(...await checkCleanHome());
   }
+  // Once per image and model: the probe asks whether the image's CLI serves the model, and a
+  // wave with two models on one image needs both answers.
   const seen = new Set<string>();
+  const seenNetworks = new Set<string>();
   for (const s of agents) {
     const sb = sandboxOf(s.config);
-    if (!sb || seen.has(sb.image)) continue;
-    seen.add(sb.image);
-    checks.push(...await checkSandbox(sb, { probeAuth: opts.probeAuth, model: s.modelRequested ?? undefined }));
+    if (!sb) continue;
+    const key = `${sb.image}|${s.modelRequested ?? ""}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      checks.push(...await checkSandbox(sb, { probeAuth: opts.probeAuth, model: s.modelRequested ?? undefined }));
+    }
+    if (sb.network && !seenNetworks.has(sb.network)) {
+      seenNetworks.add(sb.network);
+      checks.push(await checkEgress(sb.image, sb.network));
+    }
   }
   if (agents.length) {
     const urls = [...new Set(agents.flatMap((s) =>

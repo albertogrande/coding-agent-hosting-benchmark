@@ -20,6 +20,7 @@ import { EMAIL_BRIEFS, emailPromptSets } from "@/derive/email/prompt-sets";
 import { EMAIL_CATALOGUE } from "@/derive/email/vendors";
 import { GRADER_VERSION } from "@/derive/grade";
 import { runWave } from "@/runner/queue";
+import { EGRESS_POLICIES } from "@/runner/egress";
 import { captureManifests, isLocalSource, postRunOf, type AgentSurfaceConfig } from "@/runner/surfaces/agent-repo";
 import type { RunOutcome } from "@/runner/types";
 import { nextResendFromMemory } from "./fixtures/email-runs";
@@ -94,7 +95,12 @@ describe("the email waves", () => {
       expect(checks.filter((c) => c.status === "fail")).toEqual([]);
       for (const s of cfg.surfaces) {
         expect(s.config.sandbox.effort, s.label).toBe("high");
-        expect(postRunOf(s.config)?.manifests, s.label).toBe(true);
+        expect(postRunOf(s.config), s.label).toEqual({ manifests: true, compile: true });
+        // Every email run goes through its own proxy, so the open runs and the ablations are one instrument.
+        expect(EGRESS_POLICIES, s.label).toContain(s.config.sandbox.network);
+        expect(s.label.endsWith(` · ${s.config.sandbox.network}`), s.label).toBe(true);
+        // No-web is two halves: the proxy, and the web tools off, since search runs server-side.
+        expect(s.config.sandbox.disallowedTools ?? [], s.label).toEqual(s.config.sandbox.network === "no-web" ? ["WebSearch", "WebFetch"] : []);
       }
     });
   }
@@ -124,7 +130,8 @@ describe("a run through the queue", () => {
     expect(graded.map((r) => [r.winner, r.stance])).toEqual([["resend", "decided"], ["resend", "decided"]]);
     // The hosting grader's view of the same wave holds nothing: the projects never share a grade.
     expect(explorerRows(db, wave.id, GRADER_VERSION).filter((r) => r.stance)).toEqual([]);
-    expect(conditionOf(emailRunRows(db, wave.id)[0].config)).toBe("open (no proxy)");
+    expect(conditionOf(emailRunRows(db, wave.id)[0].config)).toBe("open");
+    expect(seen[0].sandbox?.network).toBe("open");
     // Idempotent, as the hosting grader is.
     expect(gradeEmailWave(db, wave.id).graded).toBe(0);
   });

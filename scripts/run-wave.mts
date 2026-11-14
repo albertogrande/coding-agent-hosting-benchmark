@@ -27,6 +27,7 @@ import { runWave } from "../src/runner/queue";
 import { environmentStamp } from "../src/runner/preflight";
 import { defaultConcurrency } from "../src/runner/surfaces";
 import { liveContainers, removeContainer, sandboxOf, sandboxStamp, sweepContainers } from "../src/runner/sandbox";
+import { sweepNetworks } from "../src/runner/egress";
 import { listProjects } from "../src/db/repo";
 
 const argv = process.argv.slice(2);
@@ -92,6 +93,9 @@ if (!argv.includes("--skip-preflight")) {
 // will store, and would run the same cell twice beside this one.
 const swept = await sweepContainers();
 if (swept.length) console.log(`removed ${swept.length} container(s) left by an earlier run`);
+// And the internal networks of a network condition, which outlive a killed runner the same way.
+const sweptNets = await sweepNetworks();
+if (sweptNets.length) console.log(`removed ${sweptNets.length} network(s) left by an earlier run`);
 
 // The queue derives this from the surfaces owed unless asked otherwise, so the browser's
 // Run button and this command cannot disagree about whether a subscription wave may run in
