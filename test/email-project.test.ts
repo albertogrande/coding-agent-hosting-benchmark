@@ -74,7 +74,7 @@ describe("the briefs", () => {
 
 describe("the email waves", () => {
   const files = fs.readdirSync(path.join(root, "waves")).filter((f) => f.startsWith("email-"));
-  const SIZE: Record<string, number> = { "email-s4-open.json": 120, "email-incumbent.json": 12, "email-s5-ablations.json": 72 };
+  const SIZE: Record<string, number> = { "email-s4-open.json": 60, "email-incumbent.json": 6, "email-s5-ablations.json": 36 };
 
   for (const f of files) {
     it(`${f} plans at the size the specification gives, and clears the design checks`, () => {
