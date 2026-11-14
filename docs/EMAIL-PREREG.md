@@ -199,5 +199,7 @@ hypothesis is added in this section before the first definitive wave, never afte
 
 Filled in when this file is committed to the public repository:
 
-- Committed: `<commit>` at `<UTC time>`.
-- First definitive run: `<UTC time>`, wave `<N>`.
+- Committed: `3b0f678`, pushed to `origin/email-playbook` at 2026-11-14 14:26:55 UTC (GitHub's
+  activity log). The text was first written in `973d5e4`.
+- First definitive run: 2026-11-14 14:27 UTC, wave 2 (S4). Wave 1 holds the 3-run smoke, planned
+  before Sonnet 5.5 was dropped.
