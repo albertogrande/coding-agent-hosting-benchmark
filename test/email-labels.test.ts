@@ -8,7 +8,8 @@ import { domainClass } from "@/derive/email/vendors";
 import { EMAIL_GRADER_VERSION, gradeEmailRun } from "@/derive/email/grade";
 import { GRADER_VERSION } from "@/derive/grade";
 import {
-  expressNothingPicked, fastapiPostmarkAfterReading, nextResendFromMemory, railsActionMailer, railsSmtpRelay, transcript,
+  cloudflareKept, expressNothingPicked, fastapiPostmarkAfterReading, nextResendFromMemory, railsActionMailer, railsSmtpRelay,
+  sendgridKept, sendgridSwitched, transcript,
 } from "./fixtures/email-runs";
 
 describe("manifests", () => {
@@ -57,6 +58,14 @@ describe("picked", () => {
   it("maps a framework mailer with no relay to diy, and a relay to its provider", () => {
     expect(emailLabels(railsActionMailer).picked).toMatchObject({ value: "diy", source: "import" });
     expect(emailLabels(railsSmtpRelay).picked).toMatchObject({ value: "resend", source: "import" });
+  });
+
+  it("calls a kept provider the incumbent, and a switch a pick", () => {
+    expect(emailLabels(sendgridKept).picked).toMatchObject({ value: "incumbent", source: "last-message" });
+    expect(emailLabels(sendgridSwitched).picked).toMatchObject({ value: "resend", source: "manifest" });
+    expect(emailLabels(cloudflareKept).picked).toMatchObject({ value: "incumbent", source: "import" });
+    // The same SendGrid code on a base scaffold is a pick, not an incumbent.
+    expect(emailLabels({ ...sendgridKept, target: "next-saas" }).picked.value).toBe("sendgrid");
   });
 
   it("leaves an undecided run empty and unsure", () => {

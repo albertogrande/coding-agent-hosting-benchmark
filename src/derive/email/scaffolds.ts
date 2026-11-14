@@ -23,6 +23,8 @@ export const SCAFFOLDS: Scaffold[] = [
   { id: "express-api", layers: ["express-api"], stack: "Node, Express, TypeScript", language: "typescript" },
   { id: "fastapi-app", layers: ["fastapi-app"], stack: "Python 3.12, FastAPI", language: "python" },
   { id: "rails-app", layers: ["rails-app"], stack: "Rails 8", language: "ruby" },
+  { id: "next-saas+sendgrid", layers: ["next-saas", "next-saas+sendgrid"], stack: "Next.js App Router, TypeScript", language: "typescript", incumbent: "sendgrid" },
+  { id: "next-saas+cloudflare", layers: ["next-saas", "next-saas+cloudflare"], stack: "Next.js App Router, TypeScript, on Cloudflare", language: "typescript", incumbent: "cloudflare" },
 ];
 
 export const SCAFFOLD_ROOT = "scaffolds/email";
