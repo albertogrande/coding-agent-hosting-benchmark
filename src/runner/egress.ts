@@ -176,8 +176,8 @@ export async function sweepNetworks(): Promise<string[]> {
 export function egressExpectations(policy: string): { url: string; want: string }[] {
   const send = { url: "https://api.resend.com/emails", want: "000" };
   switch (policy) {
-    case "open": return [send, { url: "https://example.com/", want: "200" }];
-    case "no-web": return [send, { url: "https://registry.npmjs.org/", want: "200" }, { url: "https://example.com/", want: "000" }];
+    case "open": return [send, { url: "https://www.wikipedia.org/", want: "200" }];
+    case "no-web": return [send, { url: "https://registry.npmjs.org/", want: "200" }, { url: "https://www.wikipedia.org/", want: "000" }];
     case "no-resend": return [send, { url: "https://registry.npmjs.org/", want: "200" }, { url: "https://resend.com/", want: "000" }];
     case "no-machine-files": return [send, { url: "https://resend.com/llms.txt", want: "404" }, { url: "https://resend.com/pricing", want: "200" }];
     default: return [];
