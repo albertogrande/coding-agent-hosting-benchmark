@@ -378,3 +378,19 @@ describe("applyIncumbent", () => {
     expect(a.source).toBe("config-file");
   });
 });
+
+describe("E3 deploy buttons", () => {
+  const readme = [
+    "[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=git&repository=github.com/x/y&branch=main&name=y)",
+    "[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/x/y)",
+  ].join("\n");
+  it("does not read a deploy button in a README as a deploy command", () => {
+    expect(deployArtifacts([{ path: "README.md", body: readme }])).toEqual([]);
+    expect(deployArtifacts([{ path: "docs/deploy.txt", body: readme }])).toEqual([]);
+  });
+  it("leaves a Koyeb pick to the unlisted tier, where review labels it", () => {
+    const a = adoption({ changedFiles: [], finalText: "I went with Koyeb for this service." });
+    expect(a.source).toBe("unlisted");
+    expect(a.adopted).toBe("Koyeb");
+  });
+});

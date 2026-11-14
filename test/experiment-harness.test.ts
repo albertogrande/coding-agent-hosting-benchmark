@@ -85,3 +85,19 @@ describe("usageOf", () => {
     expect(usageOf("not json").totalCostUsd).toBeNull();
   });
 });
+
+describe("gitNetwork", () => {
+  it("retries a stalled clone and returns the first success", async () => {
+    const { gitNetwork } = await import("@/runner/surfaces/agent-repo");
+    let n = 0;
+    const seen: number[] = [];
+    const out = await gitNetwork(async () => { n += 1; if (n < 3) throw new Error("early EOF"); return "ok"; },
+      { backoffMs: 1, onRetry: (a) => seen.push(a) });
+    expect(out).toBe("ok");
+    expect(seen).toEqual([1, 2]);
+  });
+  it("gives up after the last try and throws the error", async () => {
+    const { gitNetwork } = await import("@/runner/surfaces/agent-repo");
+    await expect(gitNetwork(async () => { throw new Error("timed out"); }, { tries: 2, backoffMs: 1 })).rejects.toThrow("timed out");
+  });
+});

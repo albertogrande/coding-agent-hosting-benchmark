@@ -40,6 +40,43 @@ export type AgentRunResult = RunOutcome & {
   incumbent: import("@/derive/adoption").Incumbent | null;
 };
 
+/**
+ * The clone and the pinned fetch talk to GitHub, and in E2 three of 198 clones stalled
+ * ("early EOF", or no progress at all) until someone killed them by hand. Each attempt is
+ * now bounded: git aborts a transfer that stays under 1 KB/s for 60 s, the process is
+ * killed after `GIT_NET_TIMEOUT_MS`, and the step is retried up to `GIT_NET_TRIES` times
+ * with a short back-off. A clone that still fails throws as before, and the runner's own
+ * three-strike rule decides whether the run is stored as an error.
+ */
+export const GIT_NET_TIMEOUT_MS = 3 * 60 * 1000;
+export const GIT_NET_TRIES = 3;
+
+function gitNetOptions() {
+  return {
+    maxBuffer: 64 * 1024 * 1024,
+    timeout: GIT_NET_TIMEOUT_MS,
+    killSignal: "SIGKILL" as const,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_HTTP_LOW_SPEED_LIMIT: "1000", GIT_HTTP_LOW_SPEED_TIME: "60" },
+  };
+}
+
+export async function gitNetwork<T>(
+  step: () => Promise<T>,
+  opts: { tries?: number; backoffMs?: number; onRetry?: (attempt: number, err: Error) => void } = {},
+): Promise<T> {
+  const tries = opts.tries ?? GIT_NET_TRIES;
+  const backoff = opts.backoffMs ?? 15_000;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await step();
+    } catch (e) {
+      if (attempt >= tries) throw e;
+      opts.onRetry?.(attempt, e as Error);
+      await new Promise((r) => setTimeout(r, backoff * attempt));
+    }
+  }
+}
+
 async function git(cwd: string, ...args: string[]): Promise<string> {
   try {
     const { stdout } = await exec("git", args, { cwd, maxBuffer: 32 * 1024 * 1024 });
@@ -356,12 +393,14 @@ async function runAgentIn(
   const repo = path.join(root, "repo");
   const started = Date.now();
 
-  await fs.rm(repo, { recursive: true, force: true });
-  await exec("git", ["clone", "--depth", "1", repoUrl, repo], { maxBuffer: 64 * 1024 * 1024 });
+  await gitNetwork(async () => {
+    await fs.rm(repo, { recursive: true, force: true });
+    await exec("git", ["clone", "--depth", "1", repoUrl, repo], gitNetOptions());
+  });
   if (cfg.sha) {
     // A pinned commit is fetched and checked out explicitly. Failing here is right: a cell
     // that ran against the wrong code is not a cell to keep, and the error row says why.
-    await exec("git", ["fetch", "--depth", "1", "origin", cfg.sha], { cwd: repo, maxBuffer: 64 * 1024 * 1024 });
+    await gitNetwork(() => exec("git", ["fetch", "--depth", "1", "origin", cfg.sha!], { cwd: repo, ...gitNetOptions() }));
     await exec("git", ["checkout", "--quiet", cfg.sha], { cwd: repo });
   }
   const forkSha = (await git(repo, "rev-parse", "HEAD")).trim() || null;
