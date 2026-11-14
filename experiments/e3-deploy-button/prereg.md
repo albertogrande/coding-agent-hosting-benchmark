@@ -248,3 +248,26 @@ that the README overlay is committed as the base on both button arms (the button
 tree and `README.md` is not in `changedFiles` unless the agent edited it), that the control
 README has no button, that `incumbent` is `null` on every arm, that the image and CLI
 version match the pins, and that the clone retry does not change a normal run.
+
+## Pre-launch note · 14 November 2026 (after the smoke, before any trial run)
+
+This note changes no hypothesis, arm, n, criterion, measure or analysis.
+
+- **How the button arrives.** In the three smoke runs (`smoke/`), both button-arm agents
+  inspected the latest commit and described the badge as added in it ("the one added to
+  the README in the last commit", "I left it alone because it's your change"). The
+  overlay is committed as a fresh commit on top of the fork, exactly as E2's incumbent
+  config was. That is kept, so E3 stays comparable with E2. It also means the badge
+  reads as a recent change by the repository's owner rather than a long-standing part
+  of the README. The measured effect should therefore be read as an upper bound
+  relative to a badge that has been in the README for a long time. A variant with the
+  badge folded into the fork's history would be a separate, separately pre-registered
+  experiment (E3b), not an amendment of this one.
+- **Koyeb labels.** Koyeb is not added to the adoption ladder's vocabulary, because
+  doing so changes labels already published for seasons 0 and 1. Koyeb picks reach
+  the `unlisted` tier and are labelled by the blind review described under Measures.
+- **Test suite at registration.** Two tests fail at the registered commit:
+  `test/figures.test.ts` (rebuilding the published `runs.json` byte for byte) and
+  `test/season-factpack.test.ts` (the season-0 read-order counts). Both fail
+  identically at `f6cdbd2`, before any E3 change, and neither touches the runner,
+  the adoption ladder, or the overlay path E3 uses.
