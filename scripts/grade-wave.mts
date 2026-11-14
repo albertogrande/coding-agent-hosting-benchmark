@@ -2,6 +2,9 @@
  * Grades a stored wave and prints the funnel.
  *
  *   npx tsx scripts/grade-wave.mts <waveId> [--regrade]
+ *
+ * A wave of the email project is graded by its own labels (`src/db/email-grades.ts`) under its
+ * own grader version; everything printed below reads that version's grades the same way.
  */
 import { db } from "../src/db/client";
 import { getWave } from "../src/db/waves";
@@ -12,6 +15,9 @@ import { REACH_STAGES } from "../src/derive/grade";
 import { stability } from "../src/derive/wave";
 import { projects } from "../src/db/schema";
 import { eq } from "drizzle-orm";
+import { EMAIL_PROJECT, gradeEmailWave } from "../src/db/email-grades";
+import { EMAIL_GRADER_VERSION } from "../src/derive/email/grade";
+import { readTruth } from "../src/derive/email/truth";
 
 const waveId = Number(process.argv[2]);
 if (!waveId) { console.error("usage: grade-wave.mts <waveId> [--regrade]"); process.exit(2); }
@@ -22,10 +28,14 @@ if (!wave) { console.error(`no wave ${waveId}`); process.exit(1); }
 const project = d.select().from(projects).where(eq(projects.id, wave.projectId)).get()!;
 void getProject;
 
-const r = gradeWave(d, waveId, project.brand, platformsOf(project), { regrade: process.argv.includes("--regrade") });
+const email = project.slug === EMAIL_PROJECT;
+const regrade = process.argv.includes("--regrade");
+const r = email
+  ? gradeEmailWave(d, waveId, { regrade, costAccept: readTruth().cost.accept })
+  : gradeWave(d, waveId, project.brand, platformsOf(project), { regrade });
 console.log(`graded ${r.graded} runs · ${r.voided} voided · ${r.needsReview} need review\n`);
 
-const rows = explorerRows(d, waveId);
+const rows = email ? explorerRows(d, waveId, EMAIL_GRADER_VERSION) : explorerRows(d, waveId);
 
 /**
  * `--focus <platform>` reads the ladder about somebody; without it the report is about the
@@ -64,3 +74,4 @@ for (const c of cutBy(view, (x) => x.surfaceLabel, "final")) {
 const st = stability(view);
 console.log(`\nSTABILITY  ${st.flipRate === null ? "not comparable" : `${(100 * st.flipRate).toFixed(0)}% of ${st.comparable} cells changed stance between repeats`}`);
 console.log(`ADOPTED    ${rivalWins(rows, "").slice(0, 6).map((x) => `${x.name} ${x.n}`).join(" · ")}`);
+if (email) console.log(`\nEvery email label, per run: npm run email:labels -- --wave ${waveId}`);

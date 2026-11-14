@@ -21,6 +21,7 @@ import { extractClaudeCli } from "../extract/claude-cli";
 import { extractCodexCli } from "../extract/codex-cli";
 import { adoption, decisionMode } from "@/derive/adoption";
 import { shellLookups } from "@/derive/shell-lookups";
+import { isManifest } from "@/derive/email/labels";
 import type { RunOutcome, SurfaceConfig } from "../types";
 
 const exec = promisify(execFile);
@@ -97,7 +98,70 @@ export type AgentSurfaceConfig = SurfaceConfig & {
    * what changes is what the agent can see and leave behind — nothing, either way.
    */
   sandbox?: SandboxConfig;
+  /**
+   * What to keep from the tree after the agent stops, beyond the changed files and their
+   * bodies. Off unless the wave asks: the hosting seasons ran without it, and their raw
+   * records stay the shape they were published in.
+   */
+  post?: PostRunConfig;
 };
+
+/**
+ * `manifests` keeps every dependency manifest as it was at the base commit and as the run left
+ * it, because the email labels read the diff and the clone is deleted when the run ends.
+ * `compile` runs the post-run type check (`src/runner/post-run.ts`).
+ */
+export type PostRunConfig = { manifests?: boolean; compile?: boolean };
+
+/** The post-run settings a planned surface asks for, or null. */
+export function postRunOf(config: Record<string, unknown> | undefined): PostRunConfig | null {
+  const p = config?.post as Partial<PostRunConfig> | undefined;
+  if (!p || typeof p !== "object") return null;
+  const out: PostRunConfig = {
+    ...(p.manifests === true ? { manifests: true } : {}),
+    ...(p.compile === true ? { compile: true } : {}),
+  };
+  return Object.keys(out).length ? out : null;
+}
+
+/** A clone source on this machine rather than a remote: a path, not `scheme://` or `user@host:`. */
+export function isLocalSource(url: string): boolean {
+  return !/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !/^[\w.-]+@[\w.-]+:/.test(url);
+}
+
+/**
+ * A clone of a local path records the path in its remote, its FETCH_HEAD and its reflog, and
+ * the path of a built scaffold names this repository. The agent reads `.git` as readily as
+ * anything else, so the clone forgets where it came from before the run starts.
+ */
+async function forgetLocalOrigin(repo: string): Promise<void> {
+  await git(repo, "remote", "remove", "origin");
+  await fs.rm(path.join(repo, ".git", "FETCH_HEAD"), { force: true });
+  await fs.rm(path.join(repo, ".git", "logs"), { recursive: true, force: true });
+}
+
+const ROOT_MANIFESTS = ["package.json", "requirements.txt", "pyproject.toml", "Gemfile"];
+
+/** Every manifest at the base commit and at the end of the run. Null on a side means absent. */
+export async function captureManifests(
+  repo: string,
+  baseSha: string | null,
+  changed: string[],
+): Promise<{ path: string; before: string | null; after: string | null }[]> {
+  const out: { path: string; before: string | null; after: string | null }[] = [];
+  for (const rel of [...new Set([...ROOT_MANIFESTS, ...changed.filter(isManifest)])]) {
+    let before: string | null = null;
+    if (baseSha) {
+      try {
+        before = (await exec("git", ["show", `${baseSha}:${rel}`], { cwd: repo, maxBuffer: 8 * 1024 * 1024 })).stdout;
+      } catch { /* not in the base commit */ }
+    }
+    let after: string | null = null;
+    try { after = await fs.readFile(path.join(repo, rel), "utf8"); } catch { /* deleted or never there */ }
+    if (before !== null || after !== null) out.push({ path: rel, before, after });
+  }
+  return out;
+}
 
 /**
  * File bodies are read for the adoption ladder's deploy-artifact tier and stored on the
@@ -238,6 +302,7 @@ async function runAgentIn(
   if (cfg.sha && baseSha && !baseSha.startsWith(cfg.sha)) {
     throw new Error(`pinned ${cfg.sha} but the checkout is at ${baseSha}`);
   }
+  if (isLocalSource(repoUrl)) await forgetLocalOrigin(repo);
 
   const timeoutMs = cfg.timeoutMs ?? AGENT_TIMEOUT_MS;
   let r;
@@ -299,6 +364,7 @@ async function runAgentIn(
   const extracted = agent.extract(r.stdout, { timedOut: r.timedOut, exitCode: r.exitCode });
   const files = await changedFiles(repo, baseSha);
   const bodies = await readBodies(repo, files);
+  const manifests = cfg.post?.manifests ? await captureManifests(repo, baseSha, files) : null;
 
   const a = adoption({ changedFiles: files, fileBodies: bodies, finalText: extracted.text });
   const fetches = extracted.sources.filter((s) => s.kind === "fetch").map((s) => s.url);
@@ -331,6 +397,8 @@ async function runAgentIn(
         adopted: a.adopted, source: a.source, evidence: a.evidence, conflict: a.conflict,
         decisionMode: mode,
       },
+      // Only when the wave asked for them, so a hosting record keeps its published shape.
+      ...(manifests ? { manifests } : {}),
     },
     // Served, not requested: the Claude transcript names its model on every turn, and the
     // Codex parser cannot yet read one, so it reports unknown rather than the flag.
