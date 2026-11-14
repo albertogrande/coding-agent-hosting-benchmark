@@ -225,3 +225,14 @@ Railway config is in the tree, not in `changedFiles` unless the agent edited
 it), that `incumbent` is recorded and is non-null only on treatment, that
 the control has no Railway config, and that the image and CLI version match
 the pins.
+
+## Amendment 1 · 14 November 2026, 08:05 Madrid (after 164 of 198 runs, before any analysis)
+
+The machine's Claude Code login expired at about 05:00 and its refresh token
+was rejected, so no run could start. From run 165 on, the container signs in
+with a `claude setup-token` token for the same Max subscription (`auth: token`,
+the mode of every published season) instead of mounting the machine's login
+file. Only the sign-in mechanism changes: same account, image, CLI version,
+model, effort, seed and order. No run was lost or repeated. Runs 1 to 164 keep
+their original stamps; the analysis reports the split and checks the pick rate
+per arm before and after this amendment.
