@@ -30,7 +30,7 @@ describe("the write-up's figures reproduce from the published files", () => {
     // Railway's `.railway/railway.ts`, which moved one Opus 5 run's read order from unknown
     // to read before committing, and the study took its final title and address.
     const body = JSON.stringify(siteDataset([s0, s1], "https://thebeat.dev/research/how-claude-code-picks-a-host/"));
-    expect(crypto.createHash("sha256").update(body).digest("hex")).toBe("f9fb17c771eb08b1c83bd9c1106eb610cbd24dace045b071daabd528330b834c");
+    expect(crypto.createHash("sha256").update(body).digest("hex")).toBe("b53090c9173b930f4ce670c7b5bee8a9cb78227046e70f120ee2bd886cfb3104");
   });
 
   it("counts 264 runs of 11 apps", () => {
