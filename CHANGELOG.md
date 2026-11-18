@@ -2,6 +2,34 @@
 
 Dated changes to the record. A correction says what moved and whether a headline changed.
 
+## 2026-11-18, version 2.0.0
+
+- The November experiments join the record on `main`: `experiments/e1-agents-md`,
+  `e2-railway-incumbent`, `e6-shims-leak` and `e7-cli-version`, 561 runs, each registered
+  before its first run. They ran from 10 to 14 November 2026 on a branch.
+- A new headline. A repo that names a host moves the pick: an `AGENTS.md` line took Railway
+  from 1 of 99 runs to 96 of 99, and a config file from 0 of 99 to 64 of 99. "About half
+  from memory" is now a range: 51 and 50 of 99 in October, 8 of 33 to 35 of 99 in November.
+  No September or October figure changed.
+- `npm run figures` also prints every November figure, and
+  `test/experiment-figures.test.ts` pins each one. The write-up's reading, naming and
+  favourite measures are recomputed on the 264 November runs where nothing was changed, by
+  the functions that count the September and October runs.
+- `npm run export-site` writes `experiments.json` beside `runs.json`.
+- The write-up has its final title and address: "How Claude Code picks a host", at
+  `thebeat.dev/research/how-claude-code-picks-a-host/`. The `runs.json` sha256 changes with
+  the address it carries.
+- One read order moved. Since 13 November the ladder knows Railway's `.railway/railway.ts`.
+  One season 0 run that wrote it goes from "unknown" to "read before committing". Season 0
+  counts are 34 and 19 where they were 33 and 20. No headline moved.
+- `experiments/e3-deploy-button` is closed without a result. It was registered and never
+  run past three smoke checks. A deploy button was not measured.
+- Personal email addresses are out of the stored experiments. Every figure and every
+  registered analysis reproduces unchanged.
+- A person checked 60 labels. The sample and the rule were committed before the first was
+  labelled (`audits/label-audit/`).
+- Errata are appended to the results files of `e1`, `e2` and `e6`. No figure changed.
+
 ## 2026-11-05
 
 - The README opens with a short answer and asks each finding as a question. The figures are

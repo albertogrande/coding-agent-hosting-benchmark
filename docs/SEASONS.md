@@ -302,3 +302,19 @@ what runs weighed, and grader stance-6 corrects all three (`src/derive/grade.ts`
 Outside open, season 1 now reads Railway 23 named and 0 chosen, Cloudflare 14 and 3, Vercel 25
 and 3. No adoption label, decision mode, interval or verdict moved, so nothing above changes.
 
+
+## 18 November 2026: the piece is rewritten around the November experiments
+
+The published piece is now "How Claude Code picks a host: the repo first, then memory, then
+docs". It leads with the two November tests of a repo that names a host
+(`experiments/e1-agents-md`, `experiments/e2-railway-incumbent`), then decision mode, then
+the model update.
+
+- **Why.** The November tests are the largest effects in the record and the only ones with
+  a side-by-side control. Decision mode moved between October and November, so it reads as
+  a range, not as "about half".
+- **What did not change.** No season 0 or season 1 figure, label or verdict. The verdict is
+  still reset. The piece reports the update (20 of 31) beside the same-model floor, with the
+  control.
+- **What it would have changed.** Nothing in this file's rules. The experiments compare
+  their own groups with each other and never with a season.
