@@ -4,7 +4,7 @@
 
 Which hosting platform does Claude Code pick for a real app, and what decides it? We gave it 11 real apps and one-line briefs that name no platform. Then we changed one thing at a time in the app's repo and ran each change next to an unchanged copy. The record holds 1,133 runs.
 
-**The short answer.** The repo decides first. One line in `AGENTS.md` saying "We deploy on Railway" took Railway from 1 of 99 picks to 96 of 99. With nothing in the repo about hosting, Claude Code picked from what its model already knows in a third to a half of runs, with no web search. When it did go online, it mostly read the docs of the host it then picked. Only a request for the cheapest option made it compare hosts. One model update changed about a third of its usual picks.
+**The short answer.** The repo decides first. One line in `AGENTS.md` saying "We deploy on Railway" took Railway from 1 of 99 picks to 96 of 99. With nothing in the repo about hosting, Claude Code picked from what its model already knows in a quarter to a half of runs, with no web search. When it did go online, it mostly read the docs of the host it then picked. Only a request for the cheapest option made it compare hosts. One model update changed about a third of its usual picks.
 
 This repository is the record. It holds every run, every label and the code that made both. Each number in the write-up can be checked here. The write-up is [How Claude Code picks a host](https://thebeat.dev/research/how-claude-code-picks-a-host/).
 

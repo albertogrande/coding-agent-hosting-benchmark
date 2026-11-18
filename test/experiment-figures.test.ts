@@ -53,6 +53,7 @@ describe("the November figures reproduce from the stored experiments", () => {
     expect(f.memory.october.byBrief.map((b) => n(b))).toEqual(["46/66", "39/66", "16/66"]);
     expect(f.unchanged.memoryByBrief.map((b) => n(b))).toEqual(["55/88", "23/88", "11/88"]);
     expect(n(f.memory.october.secondNightMatchesFirst)).toBe("86/99");
+    expect(n(f.memory.october.railwayPicked)).toBe("0/198");
   });
 
   it("counts the unchanged November runs by October's rules", () => {

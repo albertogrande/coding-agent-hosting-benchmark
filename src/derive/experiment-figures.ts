@@ -308,6 +308,7 @@ export function experimentFigures(input: ExperimentInputs) {
           return { brief: b, name: briefName(b), ...wilson(rs.filter((r) => r.decisionMode === "prior").length, rs.length) };
         }),
         secondNightMatchesFirst: sh(a.stubs.reference.night2AgreesWithNight1Modal),
+        railwayPicked: share(octoberBoth.filter((r) => r.adopted === "Railway").length, octoberBoth.length),
       },
     },
 
@@ -377,6 +378,7 @@ export function experimentLines(f: ExperimentFigures): string[] {
     `November, all four groups: ${si(u.memory)}`,
     ...u.memoryByBrief.map((b) => `  November, ${b.name}: ${si(b)}`),
     `October's second run picked the first run's usual host: ${s(f.memory.october.secondNightMatchesFirst)}`,
+    `October, both runs, picked Railway: ${s(f.memory.october.railwayPicked)}`,
     `November runs that picked October's usual host for the app and brief: ${s(u.matchesPublishedPick)}`,
     ...u.byGroup.map((g) => `  ${g.label}: ${s(g.matchesPublishedPick)}`),
     "",
