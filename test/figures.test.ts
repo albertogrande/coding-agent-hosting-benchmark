@@ -10,10 +10,10 @@ import type { PublishedDataset } from "@/derive/load-dataset";
 import { siteDataset } from "@/derive/site-export";
 import { fig6Rows, writeupFigures } from "@/derive/writeup-figures";
 
-// Every figure "Memory first, docs second" prints, as `npm run figures` computes it from the
+// Every figure "How Claude Code picks a host" prints, as `npm run figures` computes it from the
 // published files. A change here changes a published number: argue it in the write-up first.
 const [s0Mac, s0, s1, control, s1Night2] = [w2, w3, w5, w6, w7] as unknown as PublishedDataset[];
-const { runs } = siteDataset([s0, s1], "https://thebeat.dev/research/memory-first-docs-second/");
+const { runs } = siteDataset([s0, s1], "https://thebeat.dev/research/how-claude-code-picks-a-host/");
 const f = writeupFigures(runs, domainsFile.domains, {
   s0: fig6Rows(s0),
   s0Mac: fig6Rows(s0Mac),
@@ -25,9 +25,12 @@ const n = (x: { n: number; of: number }) => `${x.n}/${x.of}`;
 
 describe("the write-up's figures reproduce from the published files", () => {
   it("rebuilds the runs.json the page serves, byte for byte", () => {
-    // sha256 of thebeat.dev/research/memory-first-docs-second/runs.json, as served.
-    const body = JSON.stringify(siteDataset([s0, s1], "https://thebeat.dev/research/memory-first-docs-second/"));
-    expect(crypto.createHash("sha256").update(body).digest("hex")).toBe("d8761b10e30ebe4891a7e797e4ab6cf1b73cb0242e8d107983f10dd5f23a8fa7");
+    // sha256 of thebeat.dev/research/how-claude-code-picks-a-host/runs.json, as served.
+    // It changed twice in November 2026, both logged in CHANGELOG.md: the ladder learned
+    // Railway's `.railway/railway.ts`, which moved one Opus 5 run's read order from unknown
+    // to read before committing, and the study took its final title and address.
+    const body = JSON.stringify(siteDataset([s0, s1], "https://thebeat.dev/research/how-claude-code-picks-a-host/"));
+    expect(crypto.createHash("sha256").update(body).digest("hex")).toBe("f9fb17c771eb08b1c83bd9c1106eb610cbd24dace045b071daabd528330b834c");
   });
 
   it("counts 264 runs of 11 apps", () => {

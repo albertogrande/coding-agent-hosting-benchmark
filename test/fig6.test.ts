@@ -9,7 +9,7 @@ import { splitByProvenance } from "@/derive/benchmark";
 import { OPEN, rowOfPublished } from "@/derive/season-factpack";
 import { agreementWithInterval, controlReadout } from "@/derive/season-compare";
 
-// Fig. 6 of "Memory first, docs second", recomputed from the five published files with the
+// Fig. 6 of "How Claude Code picks a host", recomputed from the five published files with the
 // rows `npm run compare` reads. A change here changes a published figure.
 const rows = (f: unknown) => {
   const d = f as PublishedDataset;

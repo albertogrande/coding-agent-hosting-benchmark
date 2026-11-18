@@ -86,7 +86,7 @@ export function siteDataset(seasons: PublishedDataset[], study: string) {
   if (graders.length !== 1) throw new Error(`the seasons were graded under different versions: ${graders.join(", ")}`);
   const runs = seasons.flatMap((d) => d.runs).map(siteRun).sort((a, b) => a.run - b.run);
   return {
-    title: "Memory first, docs second: every run",
+    title: "How Claude Code picks a host: every September and October run",
     study,
     grader: graders[0],
     fields: {

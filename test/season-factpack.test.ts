@@ -64,7 +64,9 @@ describe("seasonPair", () => {
   it("orders each run's first read against the write of its chosen platform's config", () => {
     const order = (s: typeof p.s1) => Object.fromEntries(s.readOrder.map((x) => [x.order, x.runs]));
     expect(order(p.s1)).toEqual({ "no reads": 51, "read before committing": 35, "read only after committing": 3, unknown: 10 });
-    expect(order(p.s0)).toEqual({ "no reads": 45, "read before committing": 33, "read only after committing": 1, unknown: 20 });
+    // 34 and 19 since the ladder learned Railway's `.railway/railway.ts` (13 November 2026):
+    // one season 0 run that wrote it moved from unknown to read before committing.
+    expect(order(p.s0)).toEqual({ "no reads": 45, "read before committing": 34, "read only after committing": 1, unknown: 19 });
   });
 });
 

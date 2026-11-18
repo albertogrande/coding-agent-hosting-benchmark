@@ -1,5 +1,5 @@
 /**
- * Every figure the write-up "Memory first, docs second" prints, computed from this record.
+ * Every September and October figure the write-up "How Claude Code picks a host" prints, computed from this record.
  *
  * The page computes its numbers from the `runs.json` it serves, which `siteDataset` writes
  * from the two published seasons. This module computes the same numbers from the same rows,
@@ -39,7 +39,7 @@ export type Domain = { domain: string; platform: string };
 
 /** A count out of a total, with the whole percent the page prints. */
 export type Share = { n: number; of: number; pct: number };
-const share = (n: number, of: number): Share => ({ n, of, pct: Math.round((100 * n) / of) });
+export const share = (n: number, of: number): Share => ({ n, of, pct: Math.round((100 * n) / of) });
 
 type Call = SiteRun["calls"][number];
 const isWebCall = (c: Call) => c[0] === "WebSearch" || c[0] === "WebFetch";
@@ -76,6 +76,44 @@ const majorityOf = (runs: SiteRun[]) => {
   const [[name, n] = ["", 0]] = tallyPicks(runs);
   return n >= 2 ? name : null;
 };
+
+/** Runs that read the pages of two or more platforms. */
+export function comparedShare(rs: SiteRun[], platformOf: (u: string) => string | null): Share {
+  return share(rs.filter((r) => new Set(readUrls(r.calls).map(platformOf).filter(Boolean)).size >= 2).length, rs.length);
+}
+
+/**
+ * What a set of runs read, and when. Section 4 calls this on the newer model's runs under
+ * the briefs with a goal; `experiment-figures.ts` calls it on the November runs where
+ * nothing was changed, so both months are counted by one rule.
+ */
+export function docsMeasures(rs: SiteRun[], platformOf: (u: string) => string | null) {
+  const readers = rs.filter((r) => readUrls(r.calls).length);
+  const reads = readers.flatMap((r) => readUrls(r.calls).map((u) => ({ u, p: platformOf(u), picked: r.picked, brief: r.brief })));
+  const other = reads.filter((x) => x.p && x.p !== x.picked);
+  const platformReaders = rs
+    .filter((r) => r.picked)
+    .map((r) => ({ r, plats: [...new Set(readUrls(r.calls).map(platformOf).filter(Boolean))] }))
+    .filter((x) => x.plats.length);
+  const straight = platformReaders.filter(({ r }) => {
+    const first = r.calls.find((c) => isWebCall(c) || isShellRead(c))!;
+    return first[0] !== "WebSearch" && platformOf(readUrls([first])[0] ?? "") === r.picked;
+  });
+  const ordered = rs.filter((r) => r.order !== "no reads");
+  const order = (o: string) => share(ordered.filter((r) => r.order === o).length, ordered.length);
+  return {
+    ownPlatformRead: share(readers.filter((r) => r.picked && readUrls(r.calls).some((u) => platformOf(u) === r.picked)).length, readers.length),
+    otherPlatformReads: share(other.length, reads.length),
+    straightToPick: share(straight.length, platformReaders.length),
+    firstReadPicked: share(platformReaders.filter((x) => x.plats[0] === x.r.picked).length, platformReaders.length),
+    onlyReadPicked: share(platformReaders.filter((x) => x.plats.length === 1 && x.plats[0] === x.r.picked).length, platformReaders.length),
+    readBefore: order("read before committing"),
+    readAfter: order("read only after committing"),
+    readUnknown: order("unknown"),
+    otherReadsCheapest: share(other.filter((x) => x.brief === "cost").length, other.length),
+    otherReadsAboutPrice: share(other.filter((x) => PRICE_PAGE.test(x.u)).length, other.length),
+  };
+}
 
 /** A published wave as Fig. 6 compares it: usable runs, the open brief left out. */
 export function fig6Rows(d: PublishedDataset): AgentRow[] {
@@ -117,36 +155,10 @@ export function writeupFigures(runs: SiteRun[], domains: Domain[], fig6: Fig6Row
   }));
 
   // Section 4: what the newer model read, and when.
-  const readers = newer.filter((r) => readUrls(r.calls).length);
-  const reads = readers.flatMap((r) => readUrls(r.calls).map((u) => ({ u, p: platformOf(u), picked: r.picked, brief: r.brief })));
-  const other = reads.filter((x) => x.p && x.p !== x.picked);
-  const platformReaders = newer
-    .filter((r) => r.picked)
-    .map((r) => ({ r, plats: [...new Set(readUrls(r.calls).map(platformOf).filter(Boolean))] }))
-    .filter((x) => x.plats.length);
-  const straight = platformReaders.filter(({ r }) => {
-    const first = r.calls.find((c) => isWebCall(c) || isShellRead(c))!;
-    return first[0] !== "WebSearch" && platformOf(readUrls([first])[0] ?? "") === r.picked;
-  });
-  const ordered = newer.filter((r) => r.order !== "no reads");
-  const order = (o: string) => share(ordered.filter((r) => r.order === o).length, ordered.length);
-  const compared = (model: string, briefs: string[]) => {
-    const rs = of(model, briefs);
-    return share(rs.filter((r) => new Set(readUrls(r.calls).map(platformOf).filter(Boolean)).size >= 2).length, rs.length);
-  };
   const docs = {
-    ownPlatformRead: share(readers.filter((r) => r.picked && readUrls(r.calls).some((u) => platformOf(u) === r.picked)).length, readers.length),
-    otherPlatformReads: share(other.length, reads.length),
-    straightToPick: share(straight.length, platformReaders.length),
-    firstReadPicked: share(platformReaders.filter((x) => x.plats[0] === x.r.picked).length, platformReaders.length),
-    onlyReadPicked: share(platformReaders.filter((x) => x.plats.length === 1 && x.plats[0] === x.r.picked).length, platformReaders.length),
-    readBefore: order("read before committing"),
-    readAfter: order("read only after committing"),
-    readUnknown: order("unknown"),
-    comparedCost: perModel((m) => compared(m, ["cost"])),
-    comparedElsewhereNewer: compared("Opus 5.5", ["least-effort", "production", "open"]),
-    otherReadsCheapest: share(other.filter((x) => x.brief === "cost").length, other.length),
-    otherReadsAboutPrice: share(other.filter((x) => PRICE_PAGE.test(x.u)).length, other.length),
+    ...docsMeasures(newer, platformOf),
+    comparedCost: perModel((m) => comparedShare(of(m, ["cost"]), platformOf)),
+    comparedElsewhereNewer: comparedShare(of("Opus 5.5", ["least-effort", "production", "open"]), platformOf),
   };
 
   // Fig. 4: named in the closing message against picked, on the briefs with a goal.
@@ -201,7 +213,7 @@ export function figureLines(f: WriteupFigures): string[] {
   const [older, newerM] = MODELS;
   const mu = f.modelUpdate;
   return [
-    `Memory first, docs second: every figure, from ${f.runs.n} runs of ${f.apps} apps`,
+    `How Claude Code picks a host: every September and October figure, from ${f.runs.n} runs of ${f.apps} apps`,
     "",
     "## 3. Half the time, the agent looks nothing up (briefs with a goal)",
     `Decided from memory, ${older}: ${s(f.memory.share[older])}`,
