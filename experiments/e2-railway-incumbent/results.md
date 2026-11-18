@@ -221,3 +221,9 @@ run was lost or repeated.
   treatment stopped working, and the by-brief table is how that is reported.
 - The published shims stay in both arms, per E6.
 
+## Errata · 18 November 2026
+
+- The login gap is given as "about 04:34 to 08:00 Madrid" here and as "about 05:00" in
+  Amendment 1. The stored runs settle it: the last run before the gap started at 04:27
+  Madrid (03:27 UTC) and the first run after it at 08:00 Madrid (07:00 UTC). No figure
+  changes.

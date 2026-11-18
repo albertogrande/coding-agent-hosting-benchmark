@@ -202,3 +202,12 @@ rebuilt; the digest is the one pinned at registration.
   `AGENTS.md` (stack-specific commands, a Railway config already in the
   tree) is a different, stronger treatment, closer to E2.
 - All 198 runs are in. There is no partial-n interim.
+
+## Errata · 18 November 2026
+
+- The sentence "the ninth is the `astro-blog.cost` Cloudflare pick already visible in the
+  automatic labels" is wrong in its last clause. The script's labels hold two Cloudflare
+  picks and nine runs with no pick in the treatment group (`analysis-automatic.json`). The
+  ninth leftover is the third `astro-blog.cost` run, which the reviewer labelled Cloudflare.
+  It was not visible in the automatic labels. No figure changes: the reviewed counts are
+  96 Railway and 3 Cloudflare, as reported.
