@@ -46,6 +46,20 @@ describe("against Gauge's own adoption verdicts", () => {
 });
 
 describe("the adoption ladder", () => {
+  // E2, fastapi-postgres, least effort, repeat 1: the agent ran `git rm railway.toml`,
+  // wrote `render.yaml` and gave Render's steps. The deleted path was read as a config
+  // signal, came first in the list and labelled the run Railway.
+  it("does not read a deleted config file as a config the agent wrote", () => {
+    const input = {
+      changedFiles: ["Dockerfile.prod", "railway.toml", "render.yaml"],
+      finalText: "In Render: New → Blueprint, select the repo.",
+    };
+    expect(adoption(input).adopted).toBe("Railway");
+    const a = adoption({ ...input, deletedFiles: ["railway.toml"] });
+    expect(a).toMatchObject({ adopted: "Render", source: "config-file" });
+    expect(a.evidence[0]).toBe("config: Render");
+  });
+
   /**
    * A config file committed to the repository is the decision; prose is a description of
    * one. Agents routinely commit their work, which empties `git status` — so the changed
@@ -332,6 +346,35 @@ describe("incumbentOf", () => {
       changedFiles: ["fly.toml"],
     });
     expect(inc).toMatchObject({ status: "replaced", replacedBy: "Fly.io" });
+  });
+
+  // Git lists a deleted file as changed. Until 19 November 2026 that path was read as a
+  // config still in the tree, so no real run could reach `replaced` or `deleted`.
+  it("is replaced when the deleted incumbent is itself among the changed files", () => {
+    const inc = incumbentOf({
+      ...base,
+      finalBodies: { "railway.toml": null, "render.yaml": "services: []\n" },
+      changedFiles: ["railway.toml", "render.yaml"],
+    });
+    expect(inc).toMatchObject({ status: "replaced", replacedBy: "Render" });
+  });
+
+  it("is deleted when the deleted incumbent is the only changed file", () => {
+    const inc = incumbentOf({
+      ...base,
+      finalBodies: { "railway.toml": null },
+      changedFiles: ["railway.toml"],
+    });
+    expect(inc?.status).toBe("deleted");
+  });
+
+  it("stays modified when the deleted file is migrated and both paths are changed", () => {
+    const inc = incumbentOf({
+      ...base,
+      finalBodies: { "railway.toml": null, ".railway/railway.ts": ts },
+      changedFiles: ["railway.toml", ".railway/railway.ts"],
+    });
+    expect(inc).toMatchObject({ status: "modified", platform: "Railway" });
   });
 
   it("is deleted when the incumbent is gone and nothing replaces it", () => {

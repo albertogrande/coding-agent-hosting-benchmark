@@ -6,6 +6,10 @@
  * Reads only runs/ (never smoke/). Paired tests use complete blocks: both arms stored,
  * none voided or errored. H1 uses reviewed labels when present. `--automatic` reads the
  * ladder's pick labels only.
+ *
+ * corrections.json is applied first: four runs whose stored label or incumbent status
+ * came from a runner defect (a deleted railway.toml read as still present). `--as-run`
+ * skips it and reproduces the figures as first analysed.
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -137,6 +141,18 @@ const runsDir = path.join(DIR, "runs");
 const runs: Run[] = fs.existsSync(runsDir)
   ? fs.readdirSync(runsDir).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(fs.readFileSync(path.join(runsDir, f), "utf8")))
   : [];
+const asRun = process.argv.includes("--as-run");
+const correctionsFile = path.join(DIR, "corrections.json");
+const corrections: { key: string; adopted?: string; adoptionSource?: string; incumbent?: { status: string; replacedBy: string | null } }[] =
+  !asRun && fs.existsSync(correctionsFile) ? JSON.parse(fs.readFileSync(correctionsFile, "utf8")).runs : [];
+const corrected: string[] = [];
+for (const c of corrections) {
+  const r = runs.find((x) => x.key === c.key);
+  if (!r) throw new Error(`corrections.json names a run that is not stored: ${c.key}`);
+  if (c.adopted) { r.adopted = c.adopted; r.adoptionSource = c.adoptionSource ?? r.adoptionSource; }
+  if (c.incumbent) r.incumbent = { ...r.incumbent, ...c.incumbent };
+  corrected.push(c.key);
+}
 const okRuns = runs.filter((r) => r.status === "ok");
 
 type Row = {
@@ -314,6 +330,7 @@ const blocksOut = complete.map(([b, rs]) => ({
 const out = {
   generatedAt: new Date().toISOString(),
   labels: automatic ? "automatic" : "reviewed",
+  corrections: { applied: corrected.length, runs: corrected, file: asRun ? null : "corrections.json" },
   runsStored: runs.length, runsOk: okRuns.length,
   blocksStarted: blocks.size, blocksComplete: complete.length,
   decisionRuleApplies: complete.length >= 90,

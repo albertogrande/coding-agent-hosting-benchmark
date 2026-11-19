@@ -60,7 +60,8 @@ function adoptedOf(r: AgentRunRow): { adopted: string | null; conflict: string |
   const fileBodies = Array.isArray(raw.fileBodies)
     ? (raw.fileBodies as { path: string; body: string }[]).filter((b) => typeof b?.path === "string" && typeof b?.body === "string")
     : undefined;
-  const a = adoption({ changedFiles: changed, fileBodies, finalText: r.text ?? "" });
+  const deletedFiles = Array.isArray(raw.deletedFiles) ? (raw.deletedFiles as string[]) : undefined;
+  const a = adoption({ changedFiles: changed, deletedFiles, fileBodies, finalText: r.text ?? "" });
   return { adopted: a.adopted, conflict: a.conflict };
 }
 

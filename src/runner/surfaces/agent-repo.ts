@@ -104,6 +104,19 @@ export async function changedFiles(repo: string, baseSha: string | null): Promis
 }
 
 
+/** The changed paths that are no longer in the tree: git lists a deletion as a change. */
+export async function deletedFiles(repo: string, files: string[]): Promise<string[]> {
+  const gone: string[] = [];
+  for (const rel of files) {
+    try {
+      await fs.access(path.join(repo, rel));
+    } catch {
+      gone.push(rel);
+    }
+  }
+  return gone;
+}
+
 async function gitShow(repo: string, sha: string, rel: string): Promise<string | null> {
   try {
     const { stdout } = await exec("git", ["show", `${sha}:${rel}`], { cwd: repo, maxBuffer: 8 * 1024 * 1024 });
@@ -475,9 +488,10 @@ async function runAgentIn(
   const extracted = agent.extract(r.stdout, { timedOut: r.timedOut, exitCode: r.exitCode });
   const files = await changedFiles(repo, baseSha);
   const bodies = await readBodies(repo, files);
+  const gone = await deletedFiles(repo, files);
 
   const inc = await readIncumbent(repo, { overlayFiles, baseSha, changedFiles: files });
-  const a = applyIncumbent(adoption({ changedFiles: files, fileBodies: bodies, finalText: extracted.text }), inc);
+  const a = applyIncumbent(adoption({ changedFiles: files, deletedFiles: gone, fileBodies: bodies, finalText: extracted.text }), inc);
   const fetches = extracted.sources.filter((s) => s.kind === "fetch").map((s) => s.url);
   const bash = (extracted.toolTimeline ?? []).filter((e) => e.tool === "Bash").map((e) => e.detail ?? "");
   const mode = decisionMode({ searches: extracted.searchCount ?? 0, fetches: fetches.length, shellLookups: shellLookups(bash).length });
@@ -497,6 +511,9 @@ async function runAgentIn(
       // API-equivalent price the CLI computes even when a subscription pays for it.
       usage: usageOf(r.stdout),
       changedFiles: files,
+      // The changed paths that were gone at the end, so a re-grade can tell a deleted
+      // config from a written one.
+      deletedFiles: gone,
       // Processes the run left running on the measuring machine, killed at its end. A
       // cell that "deploys" to localhost is a real outcome and a fact about the harness.
       stragglersKilled: stragglers.length,

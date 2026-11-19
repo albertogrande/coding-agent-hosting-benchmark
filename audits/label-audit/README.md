@@ -2,6 +2,9 @@
 
 Written and committed on 18 November 2026, before any run in the sample was labelled.
 
+**Status on 19 November 2026: not done.** The sample is drawn and the packet is built. No
+run has been labelled by hand, and there is no `answers.json` or result yet.
+
 ## Why
 
 Every pick in this record was labelled by a script. The runs the script could not settle
