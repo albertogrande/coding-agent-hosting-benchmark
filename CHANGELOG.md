@@ -18,6 +18,8 @@ Dated changes to the record. A correction says what moved and whether a headline
   host.** The registered rule counts them, and they stay in the figure. `results.md`
   names them. Without them the share is 54 of 99.
 - **E6's amendment came after six stored runs, not four.** `results.md` has the times.
+- **The record needs Node 22, not 20.** `package.json` said `>=20`, but `better-sqlite3` and
+  `openai` require 22, and on Node 20 four test workers crash. `.nvmrc` already said 22.
 
 ## 2026-11-18, version 2.0.0
 
